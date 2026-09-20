@@ -1,0 +1,417 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import generatePayload from 'promptpay-qr';
+import QRious from 'qrious';
+import Swal from 'sweetalert2';
+import { Camera, UploadCloud, CheckCircle, ChevronRight, X, Copy, QrCode, AlertTriangle } from 'lucide-react';
+import { uploadFileToFirebase, addTransaction, updateInterestChart, updateContactData, fetchLatestGlobalInvoices } from '../services/api';
+import DateDiff from 'date-diff';
+import { addMonths } from '@progress/kendo-date-math';
+
+/**
+ * PaymentWizard — รองรับการชำระหลายงวดพร้อมกัน
+ * Props:
+ *  - selectedInstallments: Array<{ID, Id_contact, number_pay, tree, interest, begin_date, rest}>
+ *  - totalTree: number  (sum of tree)
+ *  - totalInterest: number (sum of interest)
+ *  - rest: number (total_treerest of the contact)
+ *  - Name: string
+ *  - idContact: string
+ *  - accumulate: any
+ *  - setOpenModal: (bool) => void
+ */
+const PaymentWizard = ({
+  setOpenModal,
+  selectedInstallments = [],
+  totalTree = 0,
+  totalInterest = 0,
+  rest = 0,
+  Name = '',
+  idContact = '',
+  accumulate,
+}) => {
+  const onClose = () => setOpenModal(false);
+  const onComplete = () => window.location.reload();
+
+  const [step, setStep] = useState(1);
+  const [qrSrc, setQrSrc] = useState('');
+  const [slipFile, setSlipFile] = useState(null);
+  const [slipPreview, setSlipPreview] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
+  const [feedisapp, setFeedisapp] = useState(0);
+  const [totalpay, setTotalpay] = useState(0);
+  const [invoiceID, setInvoiceID] = useState('');
+
+  // Earliest overdue row — used for fee calculation
+  const earliestRow = selectedInstallments.length > 0
+    ? selectedInstallments.reduce((prev, curr) =>
+        new Date(prev.begin_date) < new Date(curr.begin_date) ? prev : curr
+      )
+    : null;
+
+  // New rest after paying all selected
+  const acrest = rest - totalTree;
+
+  useEffect(() => {
+    // Calculate late fee from the earliest overdue installment
+    let calculatedFee = 0;
+    if (earliestRow) {
+      const dueDate = addMonths(new Date(earliestRow.begin_date), 1);
+      let lateDay = (new DateDiff(new Date(), dueDate)).days().toFixed(0) - 4;
+      calculatedFee = lateDay > 0 ? lateDay * 50 : 0;
+    }
+    setFeedisapp(calculatedFee);
+
+    const calculatedTotal = totalTree + totalInterest + calculatedFee;
+    setTotalpay(calculatedTotal);
+
+    // Generate Invoice ID
+    fetchLatestGlobalInvoices(50).then(transactions => {
+      let Allinvoice = [];
+      transactions.forEach((val) => {
+        if (val.Invoice && val.Invoice !== '') {
+          Allinvoice.push(val.Invoice);
+        }
+      });
+      let LastID = Allinvoice.length > 0 ? Allinvoice[0] : null;
+      let mydate = new Date();
+      let Poso = (parseInt(mydate.getFullYear()) + 543).toString().substring(2);
+      let AotoNo = '';
+      if (!LastID) {
+        AotoNo = '001/' + Poso;
+      } else {
+        let Count = LastID.split("/");
+        if (Count[1] !== Poso) {
+          AotoNo = '001/' + Poso;
+        } else {
+          let num = parseInt(Count[0]) + 1;
+          AotoNo = (num < 10 ? '00' + num : num < 100 ? '0' + num : num) + '/' + Poso;
+        }
+      }
+      setInvoiceID(AotoNo);
+    });
+
+    if (totalTree + totalInterest + calculatedFee > 0) {
+      try {
+        const payload = generatePayload('0123456789123', { amount: totalTree + totalInterest + calculatedFee });
+        const qr = new QRious({ value: payload, size: 250, level: 'H' });
+        setQrSrc(qr.toDataURL());
+      } catch (err) {
+        console.error("QR Generation error", err);
+      }
+    }
+  }, [totalTree, totalInterest, earliestRow]);
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSlipFile(file);
+      setSlipPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!slipFile) {
+      Swal.fire('ข้อผิดพลาด', 'กรุณาอัพโหลดสลิป', 'error');
+      return;
+    }
+    if (selectedInstallments.length === 0) {
+      Swal.fire('ข้อผิดพลาด', 'ไม่พบงวดที่เลือก', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // 1. Upload slip to Firebase
+      const timestamp = new Date().getTime();
+      const path = `slips/${idContact}/${timestamp}_${slipFile.name}`;
+      const slipUrl = await uploadFileToFirebase(slipFile, path);
+
+      const currentDate = new Date();
+      const date1 =
+        currentDate.getFullYear() + '-' +
+        String(currentDate.getMonth() + 1).padStart(2, '0') + '-' +
+        String(currentDate.getDate()).padStart(2, '0');
+
+      // Sorted installments for reference
+      const sortedInstallments = [...selectedInstallments].sort(
+        (a, b) => a.number_pay - b.number_pay
+      );
+      const numPayLabel = sortedInstallments.map(r => r.number_pay).join(',');
+
+      // 2. Add Transaction (one transaction for all selected installments)
+      const payData = {
+        type: 'จ่าย',
+        Invoice: invoiceID,
+        ID_contact: idContact,
+        Number_pay: numPayLabel,
+        begindate: date1,
+        Number_date: '',
+        details: Name,
+        type_income: 'เลขที่สัญญา ' + idContact,
+        tree: String(totalTree),
+        interest: totalInterest,
+        fee1: 0,
+        fee2: feedisapp,
+        fee3: 0,
+        payroute: 'เงินโอน',
+        accu: '0',
+        status: 'pending',
+        pdf_link: slipUrl,
+      };
+
+      await addTransaction(payData);
+
+      // 3. Update each installment row in Interest_chart
+      let runningRest = rest;
+      for (const inst of sortedInstallments) {
+        runningRest -= Number(inst.tree);
+        await updateInterestChart(inst.ID, {
+          pay_date: date1,
+          reference: invoiceID,
+          paytree: String(inst.tree),
+          payinter: String(inst.interest),
+          payfee2: String(feedisapp > 0 && inst.ID === earliestRow?.ID ? feedisapp : 0),
+          Rest: String(runningRest),
+          payroute: 'เงินโอน',
+          pdf_link: slipUrl,
+          status: 1,
+        });
+      }
+
+      // 4. Update Contact
+      await updateContactData(idContact, {
+        last_datepay: date1,
+        total_treerest: acrest,
+        accumulate: accumulate,
+      });
+
+      Swal.fire('สำเร็จ', 'บันทึกการชำระเงินเรียบร้อยแล้ว กรุณารอการตรวจสอบ', 'success');
+      onComplete();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      Swal.fire('ข้อผิดพลาด', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const sortedSelected = [...selectedInstallments].sort((a, b) => a.number_pay - b.number_pay);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-surface flex flex-col w-full h-full overflow-y-auto animate-fade-in font-sans">
+      {/* Header & Stepper Section */}
+      <div className="bg-primary text-white p-4 sm:p-6 border-b-2 border-secondary-fixed sticky top-0 z-10 shadow-md">
+        <div className="flex justify-between items-center mb-6 max-w-xl mx-auto w-full">
+          <h2 className="text-xl sm:text-2xl font-bold font-sans text-secondary-fixed">แจ้งชำระค่างวด</h2>
+          <button onClick={onClose} className="text-white/80 hover:text-white transition p-2 bg-white/10 hover:bg-white/20 rounded-full" aria-label="ปิด">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Stepper */}
+        <div className="flex justify-between items-center mb-2 relative z-10 px-4 max-w-xl mx-auto w-full">
+          <div className="absolute top-1/2 left-0 w-full h-1 bg-white/20 -z-10 -translate-y-1/2 rounded-full"></div>
+          {[1, 2, 3].map((s) => (
+            <div
+              key={s}
+              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
+                step >= s
+                  ? 'bg-secondary text-primary shadow-md scale-110'
+                  : 'bg-white/20 text-white/60'
+              }`}
+            >
+              {s}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Content Body */}
+      <div className="flex-grow p-4 sm:p-8 bg-surface overflow-y-auto">
+        <div className="max-w-xl mx-auto w-full pb-16">
+          {/* Step 1: Summary */}
+          {step === 1 && (
+            <div className="animate-fade-in">
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold text-primary mb-1 font-sans">ตรวจสอบยอดชำระ</h3>
+                <p className="text-on-surface-variant font-sans text-sm">สัญญาเลขที่ {idContact} — ชำระ {selectedInstallments.length} งวด</p>
+              </div>
+
+              {/* Installment list */}
+              <div className="bg-slate-50 rounded-lg border border-outline-variant/30 mb-4 overflow-hidden">
+                <div className="px-4 py-2 border-b border-outline-variant/20 text-xs font-bold text-on-surface-variant uppercase tracking-wider font-sans">
+                  งวดที่เลือกชำระ
+                </div>
+                {sortedSelected.map((inst, i) => (
+                  <div key={i} className="flex justify-between items-center px-4 py-3 border-b border-outline-variant/10 last:border-0">
+                    <span className="text-sm font-sans text-on-surface">
+                      งวด {inst.number_pay}
+                      {new Date(inst.begin_date) < new Date() && inst.status !== 1 && (
+                        <span className="ml-2 text-red-600 text-xs font-bold">(ค้างชำระ)</span>
+                      )}
+                    </span>
+                    <span className="text-sm font-bold text-primary font-sans">
+                      {(Number(inst.tree) + Number(inst.interest)).toLocaleString()} ฿
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Totals */}
+              <div className="bg-white rounded-lg shadow-sm border border-outline-variant/30 overflow-hidden mb-6">
+                <div className="flex justify-between p-4 border-b border-outline-variant/10">
+                  <span className="text-on-surface-variant font-sans">เงินต้นรวม</span>
+                  <span className="font-semibold text-primary font-sans">{totalTree.toLocaleString()} ฿</span>
+                </div>
+                <div className="flex justify-between p-4 border-b border-outline-variant/10">
+                  <span className="text-on-surface-variant font-sans">ดอกเบี้ยรวม</span>
+                  <span className="font-semibold text-primary font-sans">{totalInterest.toLocaleString()} ฿</span>
+                </div>
+                {feedisapp > 0 && (
+                  <div className="flex justify-between p-4 border-b border-outline-variant/10 text-red-600 font-sans">
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle size={14} /> ค่าปรับล่าช้า
+                    </span>
+                    <span className="font-semibold">{feedisapp.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                <div className="flex justify-between p-5 bg-slate-50/80">
+                  <span className="text-lg font-bold text-primary font-sans">ยอดรวมทั้งสิ้น</span>
+                  <span className="text-2xl font-black text-secondary font-sans">{totalpay.toLocaleString()} ฿</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setStep(2)}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-primary/20"
+              >
+                ดำเนินการต่อ <ChevronRight size={20} />
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: QR Code */}
+          {step === 2 && (
+            <div className="animate-fade-in flex flex-col items-center">
+              <h3 className="text-xl font-bold text-primary mb-6 font-sans">สแกนเพื่อชำระเงิน</h3>
+
+              <div className="bg-white p-6 rounded-lg shadow-md border border-outline-variant/30 mb-6 flex flex-col items-center w-full">
+                {qrSrc ? (
+                  <img src={qrSrc} alt="PromptPay QR" className="w-56 h-56 object-contain" />
+                ) : (
+                  <div className="w-56 h-56 bg-surface rounded-lg flex flex-col items-center justify-center text-outline">
+                    <QrCode size={48} className="mb-2" />
+                    <span className="font-sans">กำลังสร้าง QR...</span>
+                  </div>
+                )}
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-on-surface-variant font-sans">บริษัท ทรัพย์สำราญ พีโก จำกัด</p>
+                  <p className="font-bold text-lg text-primary mt-1 font-sans">ยอดชำระ: {totalpay.toLocaleString()} บาท</p>
+                </div>
+              </div>
+
+              <div className="bg-secondary-container/10 border border-secondary-fixed/50 rounded-lg p-4 mb-6 w-full text-center flex flex-col items-center gap-2">
+                <span className="text-sm font-bold text-secondary font-sans">หรือโอนเข้าบัญชีธนาคาร SCB</span>
+                <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg font-mono font-bold text-lg text-primary shadow-sm">
+                  426-047180-9
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText('4260471809');
+                      Swal.fire({ icon: 'success', title: 'คัดลอกสำเร็จ', toast: true, position: 'top-end', showConfirmButton: false, timer: 1500 });
+                    }}
+                    className="text-secondary hover:text-secondary-container p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-secondary-container/20 hover:bg-secondary-container/40 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50"
+                    aria-label="คัดลอกเลขบัญชี 426-047180-9"
+                  >
+                    <Copy size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex-1 bg-white border-2 border-outline-variant/30 text-on-surface-variant font-bold py-4 rounded-lg transition hover:bg-slate-50 font-sans"
+                >
+                  ย้อนกลับ
+                </button>
+                <button
+                  onClick={() => setStep(3)}
+                  className="flex-1 bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg font-sans"
+                >
+                  แนบสลิป <UploadCloud size={20} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Upload Slip */}
+          {step === 3 && (
+            <div className="animate-fade-in flex flex-col items-center">
+              <h3 className="text-xl font-bold text-primary mb-6 font-sans">อัพโหลดหลักฐานการโอน</h3>
+
+              <div className="w-full mb-6">
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="slip-upload"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <label
+                  htmlFor="slip-upload"
+                  className={`w-full flex flex-col items-center justify-center border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                    slipPreview ? 'border-primary bg-primary/5 p-2' : 'border-outline-variant/50 hover:border-primary hover:bg-slate-50 p-10'
+                  }`}
+                >
+                  {slipPreview ? (
+                    <img src={slipPreview} alt="Slip Preview" className="max-h-[300px] object-contain rounded-lg shadow-sm" />
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-4">
+                        <Camera size={32} />
+                      </div>
+                      <span className="font-bold text-primary font-sans">แตะเพื่อเลือกรูปภาพสลิป</span>
+                      <span className="text-sm text-on-surface-variant mt-1 font-sans">รองรับ JPG, PNG</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setStep(2)}
+                  className="w-1/3 bg-white border-2 border-outline-variant/30 text-on-surface-variant font-bold py-4 rounded-lg transition hover:bg-slate-50 font-sans"
+                  disabled={isUploading}
+                >
+                  ย้อนกลับ
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!slipFile || isUploading}
+                  className={`flex-1 font-bold py-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg font-sans ${
+                    !slipFile || isUploading
+                      ? 'bg-slate-200 text-on-surface-variant/40 cursor-not-allowed'
+                      : 'bg-primary text-white hover:bg-primary-container'
+                  }`}
+                >
+                  {isUploading ? (
+                    <span className="animate-pulse font-sans">กำลังบันทึก...</span>
+                  ) : (
+                    <>ยืนยันการชำระเงิน <CheckCircle size={20} /></>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+};
+
+export default PaymentWizard;

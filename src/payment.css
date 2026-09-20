@@ -1,0 +1,33 @@
+.toggleHide{
+    display:none;
+  }
+
+  .toggleShow{
+    display: inline;
+  }
+
+.cusinfo {
+  font-size:large;
+  color: whitesmoke;
+}
+.cusclose {
+  font-size:large;
+  color: whitesmoke;
+  background-color: brown;
+}
+
+
+.react-datalist-input__container{
+  color: #079ca7;
+  font-weight: bolder;
+  text-align: center;
+  font-size: 1rem;
+  width: 88%;
+  height: 45px;
+  border: 0px solid rgb(167,166,166);
+  border-radius: 5em;
+}
+
+.table tbody thead{
+  text-align: center;
+}

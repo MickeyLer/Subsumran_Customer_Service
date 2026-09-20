@@ -1,0 +1,68 @@
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.11.4",
+    "@emotion/styled": "^11.11.0",
+    "@line/bot-sdk": "^9.0.3",
+    "@line/liff": "^2.23.2",
+    "@mui/material": "^5.15.14",
+    "@progress/kendo-date-math": "^1.5.12",
+    "@supabase/supabase-js": "^2.106.1",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "bootstrap": "^5.3.3",
+    "date-diff": "^1.0.2",
+    "dateformat": "^5.0.3",
+    "firebase": "^12.13.0",
+    "html2canvas": "^1.4.1",
+    "lucide-react": "^1.16.0",
+    "luxon": "^3.4.4",
+    "promptpay-qr": "^0.5.0",
+    "qr-scanner": "^1.4.2",
+    "qrcode": "^1.5.3",
+    "qrious": "^4.0.2",
+    "next": "^14.2.15",
+    "react": "^18.2.0",
+    "react-bootstrap": "^2.10.1",
+    "react-copy-to-clipboard": "^5.1.0",
+    "react-dom": "^18.2.0",
+    "react-qr-reader": "^3.0.0-beta-1",
+    "react-qr-scanner": "^1.0.0-alpha.11",
+    "react-toastify": "^10.0.5",
+    "sweetalert2": "^11.10.7",
+    "tesseract.js": "^5.0.5",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "eslintConfig": {
+    "extends": [
+      "next/core-web-vitals"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.19"
+  }
+}
