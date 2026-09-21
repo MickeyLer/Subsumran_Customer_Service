@@ -7,6 +7,7 @@ import { DataContext } from './DataContext';
 import Swal from 'sweetalert2';
 import logo from './Logo.png';
 import RichMenuGrid from './components/RichMenuGrid';
+import { getContractProgression, getOverallProgression } from './utils/installmentProgression';
 
 function Home() {
   const router = useRouter();
@@ -171,24 +172,10 @@ function Home() {
     return userContacts.filter(row => row.total_treerest > 0);
   }, [userContacts]);
 
-  // Unpaid Installments Calculation
-  const unpaidInstallments = useMemo(() => {
-    if (!dataInterest) return [];
-    const activeContractIds = activeContacts.map(c => c.ID_contact);
-    return dataInterest.filter(inst => activeContractIds.includes(inst.Id_contact) && inst.status !== 1);
-  }, [dataInterest, activeContacts]);
-
-  // Sort by date to get earliest unpaid
+  // Overall Progression Query
   const { nextInstallment, nextContract } = useMemo(() => {
-    const sorted = [...unpaidInstallments].sort(
-      (a, b) => new Date(a.begin_date) - new Date(b.begin_date)
-    );
-    const earliest = sorted[0];
-    const contract = earliest
-      ? activeContacts.find(c => c.ID_contact === earliest.Id_contact)
-      : activeContacts[0];
-    return { nextInstallment: earliest, nextContract: contract };
-  }, [unpaidInstallments, activeContacts]);
+    return getOverallProgression(activeContacts, dataInterest || []);
+  }, [activeContacts, dataInterest]);
 
   // Helper: Format Thai Date
   const formatThaiDate = (dateStr) => {
@@ -523,30 +510,15 @@ function Home() {
           </div>
         ) : (
           activeContacts.map((c, idx) => {
-            // Find installments for this contract
             const contractInstallments = dataInterest ? dataInterest.filter(inst => inst.Id_contact === c.ID_contact) : [];
-            const contractUnpaid = contractInstallments.filter(inst => inst.status !== 1);
-            const contractSortedUnpaid = [...contractUnpaid].sort((a, b) => new Date(a.begin_date) - new Date(b.begin_date));
-            const nextInst = contractSortedUnpaid[0];
-
-            // Progression calculations
-            const paidCount = contractInstallments.filter(inst => inst.status === 1).length;
-            const totalCount = Number(c.month_loan) || contractInstallments.length || 0;
-            const progressPercent = totalCount > 0 ? Math.min(100, Math.round((paidCount / totalCount) * 100)) : 0;
-
-            // Calculate next payment total (tree + interest + fee if overdue)
-            let nextFee = 0;
-            if (nextInst && nextInst.begin_date) {
-              const beginDate = new Date(nextInst.begin_date);
-              const dueDate = new Date(beginDate.getFullYear(), beginDate.getMonth() + 1, beginDate.getDate());
-              const today = new Date();
-              const diffTime = today - dueDate;
-              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) - 4;
-              if (diffDays > 0) {
-                nextFee = diffDays * 50;
-              }
-            }
-            const nextPayTotal = nextInst ? Number(nextInst.tree || 0) + Number(nextInst.interest || 0) + nextFee : 0;
+            const {
+              nextInstallment: nextInst,
+              nextFee,
+              nextPayTotal,
+              paidCount,
+              totalCount,
+              progressPercent
+            } = getContractProgression(c, contractInstallments);
 
             return (
               <div 

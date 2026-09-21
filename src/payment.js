@@ -8,6 +8,7 @@ import { DataContext } from './DataContext';
 import { addMonths } from '@progress/kendo-date-math';
 import DateDiff from 'date-diff';
 import { ChevronLeft, CreditCard, AlertTriangle, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
+import { getContractProgression } from './utils/installmentProgression';
 
 function Pay() {
     const { dataContact } = useContext(DataContext);
@@ -71,21 +72,12 @@ function Pay() {
       return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
     };
 
-    // Find the next unpaid installment
+    // Find next unpaid installment & fee using Installment Progression Module
     const installments = search(dataInterest || []);
-    const unpaidInstallments = installments.filter(row => row.status !== 1);
-    const sortedUnpaid = [...unpaidInstallments].sort(
-      (a, b) => new Date(a.begin_date) - new Date(b.begin_date)
+    const { nextInstallment, nextFee: calculatedFee } = getContractProgression(
+      currentContact,
+      installments
     );
-    const nextInstallment = sortedUnpaid[0];
-
-    // Calculate late fee / fine for nextInstallment
-    let calculatedFee = 0;
-    if (nextInstallment) {
-      const dueDate = addMonths(new Date(nextInstallment.begin_date), 1);
-      let lateDay = (new DateDiff(new Date(), dueDate)).days().toFixed(0) - 4;
-      calculatedFee = lateDay > 0 ? lateDay * 50 : 0;
-    }
 
     const autoPayTriggeredRef = useRef(false);
 

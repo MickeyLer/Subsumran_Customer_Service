@@ -82,160 +82,18 @@ export const deleteCustomer = async (id) => {
     return result;
 };
 
-// ==========================================
-// FIREBASE STORAGE APIs (IMAGE UPLOADS)
-// ==========================================
-
-/**
- * Generic file upload to Firebase Storage.
- * @param {File} file 
- * @param {string} path - Storage path (e.g. 'profiles/userid/photo.jpg')
- */
-export const uploadFileToFirebase = async (file, path) => {
-    if (!file) return null;
-    try {
-        const storageRef = ref(storage, path);
-        const snapshot = await uploadBytes(storageRef, file);
-        return await getDownloadURL(snapshot.ref);
-    } catch (error) {
-        console.error('Error uploading file to Firebase:', error);
-        throw error;
-    }
-};
-
-/**
- * Uploads a customer photo to Firebase Storage and returns the Download URL.
- * Also cleans up any existing photos in the customer's folder.
- * @param {File} file - The file object from input
- * @param {string} customerId - The unique ID of the customer
- * @returns {Promise<string>} - The public download URL
- */
-export const uploadCustomerPhotoToFirebase = async (file, customerId) => {
-    // 1. Clear existing photos to prevent orphans
-    try {
-        await deleteFolderFromFirebase(`customer_photos/${customerId}/`);
-    } catch (e) {
-        console.log('No existing folder to clear or error clearing folder', e.message);
-    }
-
-    // 2. Upload new photo
-    return uploadFileToFirebase(file, `customer_photos/${customerId}/${file.name}`);
-};
-
-/**
- * Deletes a specific file from Firebase Storage.
- * @param {string} path - Storage path (e.g. 'profiles/userid/photo.jpg')
- */
-export const deleteFileFromFirebase = async (path) => {
-    try {
-        const storageRef = ref(storage, path);
-        await deleteObject(storageRef);
-        console.log(`Firebase Storage: Deleted file at ${path}`);
-    } catch (error) {
-        if (error.code === 'storage/object-not-found') {
-            console.log(`Firebase Storage: File not found at ${path}, skipping deletion.`);
-        } else {
-            console.error('Error deleting file from Firebase:', error);
-            throw error;
-        }
-    }
-};
-
-/**
- * Deletes an entire "folder" (prefix) from Firebase Storage.
- * @param {string} folderPath - Path of the folder (e.g. 'customer_photos/123/')
- */
-export const deleteFolderFromFirebase = async (folderPath) => {
-    try {
-        // Ensure path ends with / for safety
-        const path = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
-        const folderRef = ref(storage, path);
-        const listResult = await listAll(folderRef);
-
-        const deletePromises = listResult.items.map((item) => deleteObject(item));
-        const subFolderPromises = listResult.prefixes.map((subFolder) => deleteFolderFromFirebase(subFolder.fullPath));
-
-        await Promise.all([...deletePromises, ...subFolderPromises]);
-        console.log(`Firebase Storage: Cleared folder at ${path}`);
-    } catch (error) {
-        console.error('Error clearing folder from Firebase:', error);
-        // We don't throw if it's just a "not found" error
-        if (error.code !== 'storage/object-not-found') {
-            throw error;
-        }
-    }
-};
-
-export const updateCustomerPhotoInFirebase = async (file, customerId) => {
-    // Logic is essentially the same as add for now
-    return uploadCustomerPhotoToFirebase(file, customerId);
-};
-
-/**
- * Uploads a profile photo to Firebase Storage and returns the Download URL.
- * Also cleans up any existing photos in the user's profile folder.
- * @param {File} file - The file object from input
- * @param {string} userId - The unique ID of the user (from Firebase Auth)
- * @returns {Promise<string>} - The public download URL
- */
-export const uploadProfilePhotoToFirebase = async (file, userId) => {
-    if (!file) return null;
-    // 1. Clear existing photos to prevent orphans
-    try {
-        await deleteFolderFromFirebase(`profile_photos/${userId}/`);
-    } catch (e) {
-        console.log('No existing folder to clear or error clearing folder', e.message);
-    }
-
-    // 2. Upload new photo
-    return uploadFileToFirebase(file, `profile_photos/${userId}/${file.name}`);
-};
-
-/**
- * Uploads the company logo to Firebase Storage
- * @param {File} file - The file object from input
- * @returns {Promise<string>} - The public download URL
- */
-export const uploadCompanyLogoToFirebase = async (file) => {
-    if (!file) return null;
-    try {
-        await deleteFolderFromFirebase(`company/logo/`);
-    } catch (e) {
-        console.log('No existing logo folder to clear', e.message);
-    }
-    return uploadFileToFirebase(file, `company/logo/${file.name}`);
-};
-
-/**
- * Uploads a generated PDF contract to Firebase Storage
- * @param {Blob} pdfBlob - The generated PDF Blob
- * @param {string} path - The specific path (e.g., 'contracts_pdf/18-2569/loan_contract.pdf')
- * @returns {Promise<string>} - The public download URL
- */
-export const uploadContractPDFToFirebase = async (pdfBlob, path) => {
-    if (!pdfBlob) return null;
-    return uploadFileToFirebase(pdfBlob, path);
-};
-
-/**
- * Fetches the download URL for a generated PDF contract from Firebase Storage.
- * @param {string} contractId - The unique ID of the contract (ID_contact)
- * @param {string} fileName - The PDF file name (e.g., 'loan_contract.pdf')
- * @returns {Promise<string|null>} - The public download URL, or null if not found
- */
-export const fetchContractPDFUrl = async (contractId, fileName) => {
-    try {
-        const path = `contracts_pdf/${contractId.replace(/\//g, '-')}/${fileName}`;
-        const storageRef = ref(storage, path);
-        return await getDownloadURL(storageRef);
-    } catch (error) {
-        if (error.code === 'storage/object-not-found') {
-            return null; // Not found, return null gracefuly
-        }
-        console.error('Error fetching PDF from Firebase:', error);
-        return null;
-    }
-};
+// Re-export Storage Adapter Seam (backward compatible)
+export {
+    uploadFileToStorage as uploadFileToFirebase,
+    deleteFileFromStorage as deleteFileFromFirebase,
+    deleteFolderFromStorage as deleteFolderFromFirebase,
+    uploadCustomerPhoto as uploadCustomerPhotoToFirebase,
+    uploadCustomerPhoto as updateCustomerPhotoInFirebase,
+    uploadProfilePhoto as uploadProfilePhotoToFirebase,
+    uploadCompanyLogo as uploadCompanyLogoToFirebase,
+    uploadContractPDF as uploadContractPDFToFirebase,
+    fetchContractPDFUrl
+} from './storageSeam';
 
 
 // ==========================================

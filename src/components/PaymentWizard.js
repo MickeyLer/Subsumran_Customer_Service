@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import generatePayload from 'promptpay-qr';
 import QRious from 'qrious';
 import Swal from 'sweetalert2';
-import { Camera, UploadCloud, CheckCircle, ChevronRight, X, Copy, QrCode, AlertTriangle } from 'lucide-react';
-import { uploadFileToFirebase, addTransaction, updateInterestChart, updateContactData, fetchLatestGlobalInvoices } from '../services/api';
-import DateDiff from 'date-diff';
-import { addMonths } from '@progress/kendo-date-math';
+import { Camera, UploadCloud, CheckCircle, ChevronRight, X, Copy, QrCode, AlertTriangle, Check } from 'lucide-react';
+import { submitPaymentSettlement } from '../services/paymentSettlement';
+import { calculateOverdueFee } from '../utils/installmentProgression';
 
 /**
  * PaymentWizard — รองรับการชำระหลายงวดพร้อมกัน
@@ -42,7 +41,6 @@ const PaymentWizard = ({
 
   const [feedisapp, setFeedisapp] = useState(0);
   const [totalpay, setTotalpay] = useState(0);
-  const [invoiceID, setInvoiceID] = useState('');
 
   // Earliest overdue row — used for fee calculation
   const earliestRow = selectedInstallments.length > 0
@@ -51,51 +49,17 @@ const PaymentWizard = ({
       )
     : null;
 
-  // New rest after paying all selected
-  const acrest = rest - totalTree;
-
   useEffect(() => {
     // Calculate late fee from the earliest overdue installment
-    let calculatedFee = 0;
-    if (earliestRow) {
-      const dueDate = addMonths(new Date(earliestRow.begin_date), 1);
-      let lateDay = (new DateDiff(new Date(), dueDate)).days().toFixed(0) - 4;
-      calculatedFee = lateDay > 0 ? lateDay * 50 : 0;
-    }
+    const calculatedFee = earliestRow ? calculateOverdueFee(earliestRow.begin_date) : 0;
     setFeedisapp(calculatedFee);
 
     const calculatedTotal = totalTree + totalInterest + calculatedFee;
     setTotalpay(calculatedTotal);
 
-    // Generate Invoice ID
-    fetchLatestGlobalInvoices(50).then(transactions => {
-      let Allinvoice = [];
-      transactions.forEach((val) => {
-        if (val.Invoice && val.Invoice !== '') {
-          Allinvoice.push(val.Invoice);
-        }
-      });
-      let LastID = Allinvoice.length > 0 ? Allinvoice[0] : null;
-      let mydate = new Date();
-      let Poso = (parseInt(mydate.getFullYear()) + 543).toString().substring(2);
-      let AotoNo = '';
-      if (!LastID) {
-        AotoNo = '001/' + Poso;
-      } else {
-        let Count = LastID.split("/");
-        if (Count[1] !== Poso) {
-          AotoNo = '001/' + Poso;
-        } else {
-          let num = parseInt(Count[0]) + 1;
-          AotoNo = (num < 10 ? '00' + num : num < 100 ? '0' + num : num) + '/' + Poso;
-        }
-      }
-      setInvoiceID(AotoNo);
-    });
-
-    if (totalTree + totalInterest + calculatedFee > 0) {
+    if (calculatedTotal > 0) {
       try {
-        const payload = generatePayload('0123456789123', { amount: totalTree + totalInterest + calculatedFee });
+        const payload = generatePayload('0123456789123', { amount: calculatedTotal });
         const qr = new QRious({ value: payload, size: 250, level: 'H' });
         setQrSrc(qr.toDataURL());
       } catch (err) {
@@ -124,68 +88,15 @@ const PaymentWizard = ({
 
     setIsUploading(true);
     try {
-      // 1. Upload slip to Firebase
-      const timestamp = new Date().getTime();
-      const path = `slips/${idContact}/${timestamp}_${slipFile.name}`;
-      const slipUrl = await uploadFileToFirebase(slipFile, path);
-
-      const currentDate = new Date();
-      const date1 =
-        currentDate.getFullYear() + '-' +
-        String(currentDate.getMonth() + 1).padStart(2, '0') + '-' +
-        String(currentDate.getDate()).padStart(2, '0');
-
-      // Sorted installments for reference
-      const sortedInstallments = [...selectedInstallments].sort(
-        (a, b) => a.number_pay - b.number_pay
-      );
-      const numPayLabel = sortedInstallments.map(r => r.number_pay).join(',');
-
-      // 2. Add Transaction (one transaction for all selected installments)
-      const payData = {
-        type: 'จ่าย',
-        Invoice: invoiceID,
-        ID_contact: idContact,
-        Number_pay: numPayLabel,
-        begindate: date1,
-        Number_date: '',
-        details: Name,
-        type_income: 'เลขที่สัญญา ' + idContact,
-        tree: String(totalTree),
-        interest: totalInterest,
-        fee1: 0,
-        fee2: feedisapp,
-        fee3: 0,
-        payroute: 'เงินโอน',
-        accu: '0',
-        status: 'pending',
-        pdf_link: slipUrl,
-      };
-
-      await addTransaction(payData);
-
-      // 3. Update each installment row in Interest_chart
-      let runningRest = rest;
-      for (const inst of sortedInstallments) {
-        runningRest -= Number(inst.tree);
-        await updateInterestChart(inst.ID, {
-          pay_date: date1,
-          reference: invoiceID,
-          paytree: String(inst.tree),
-          payinter: String(inst.interest),
-          payfee2: String(feedisapp > 0 && inst.ID === earliestRow?.ID ? feedisapp : 0),
-          Rest: String(runningRest),
-          payroute: 'เงินโอน',
-          pdf_link: slipUrl,
-          status: 1,
-        });
-      }
-
-      // 4. Update Contact
-      await updateContactData(idContact, {
-        last_datepay: date1,
-        total_treerest: acrest,
-        accumulate: accumulate,
+      await submitPaymentSettlement({
+        selectedInstallments,
+        totalTree,
+        totalInterest,
+        rest,
+        customerName: Name,
+        contractId: idContact,
+        accumulate,
+        slipFile,
       });
 
       Swal.fire('สำเร็จ', 'บันทึกการชำระเงินเรียบร้อยแล้ว กรุณารอการตรวจสอบ', 'success');
@@ -193,7 +104,7 @@ const PaymentWizard = ({
       onClose();
     } catch (err) {
       console.error(err);
-      Swal.fire('ข้อผิดพลาด', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+      Swal.fire('ข้อผิดพลาด', err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
     } finally {
       setIsUploading(false);
     }
@@ -213,20 +124,56 @@ const PaymentWizard = ({
         </div>
 
         {/* Stepper */}
-        <div className="flex justify-between items-center mb-2 relative z-10 px-4 max-w-xl mx-auto w-full">
-          <div className="absolute top-1/2 left-0 w-full h-1 bg-white/20 -z-10 -translate-y-1/2 rounded-full"></div>
-          {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
-                step >= s
-                  ? 'bg-secondary text-primary shadow-md scale-110'
-                  : 'bg-white/20 text-white/60'
-              }`}
-            >
-              {s}
-            </div>
-          ))}
+        <div className="relative z-10 px-4 max-w-xl mx-auto w-full mb-1">
+          {/* Progress Line Track */}
+          <div className="absolute top-[18px] left-9 right-9 h-1 bg-white/20 -z-10 rounded-full">
+            <div 
+              className="h-full bg-secondary-fixed transition-all duration-300 rounded-full"
+              style={{ width: `${((step - 1) / 2) * 100}%` }}
+            />
+          </div>
+
+          <div className="flex justify-between items-start">
+            {[
+              { id: 1, label: 'ตรวจสอบยอด' },
+              { id: 2, label: 'สแกน QR' },
+              { id: 3, label: 'แนบสลิป' },
+            ].map((s) => {
+              const isCompleted = step > s.id;
+              const isActive = step === s.id;
+
+              return (
+                <div key={s.id} className="flex flex-col items-center min-w-[64px]">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 ${
+                      isActive
+                        ? 'bg-white text-primary shadow-lg ring-4 ring-white/30 scale-110 font-black text-base'
+                        : isCompleted
+                        ? 'bg-secondary-fixed text-on-primary-fixed-variant shadow-md font-bold'
+                        : 'bg-white/15 text-white/90 border border-white/30 font-semibold text-sm'
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <Check size={18} className="stroke-[3]" />
+                    ) : (
+                      <span>{s.id}</span>
+                    )}
+                  </div>
+                  <span
+                    className={`mt-1.5 text-[11px] sm:text-xs font-sans transition-colors duration-200 text-center ${
+                      isActive
+                        ? 'text-secondary-fixed font-bold'
+                        : isCompleted
+                        ? 'text-white/90 font-medium'
+                        : 'text-white/60 font-normal'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

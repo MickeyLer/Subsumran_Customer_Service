@@ -1,74 +1,90 @@
 "use client";
 
-import React, { useState, useEffect ,useContext,useReducer} from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { fetchContacts, fetchAllInterest, fetchAllTransactions, fetchCustomers } from './services/api';
 import Swal from 'sweetalert2';
-import { ToastContainer, toast } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+/**
+ * Customer Data Module & Provider
+ * 
+ * Deep module encapsulating customer data state, background refresh, and domain queries.
+ */
 export const DataContext = React.createContext(null);
 
 export const DataProvider = ({ children }) => {
-
-    const Toast = Swal.mixin({
-        toast: true,
-        position: 'top-end',
-        customClass: {
-          container: 'position-absolute'
-        },
-        showConfirmButton: false,
-        timer: 3000,
-        timerProgressBar: true,
-        didOpen: (toast) => {
-          toast.addEventListener('mouseenter', Swal.stopTimer)
-          toast.addEventListener('mouseleave', Swal.resumeTimer)
-        }
-      })
-
-    const [dataContact ,setDataContact] = useState(null);
-    const [dataCustomer ,setDataCustomer] = useState(null);
-    const [dataInterest ,setInterestData] = useState(null);
-    const [dataTransaction ,setTransactionData] = useState(null);
+    const [dataContact, setDataContact] = useState(null);
+    const [dataCustomer, setDataCustomer] = useState(null);
+    const [dataInterest, setInterestData] = useState(null);
+    const [dataTransaction, setTransactionData] = useState(null);
     const [modalShown, toggleModal] = useState(false);
     const [modalShown2, toggleModal2] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(()=>{
-        const loadData = async () => {
-            try {
-                // Fetch from Supabase
-                const contacts = await fetchContacts();
-                setDataContact(contacts);
+    const refreshAllData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const [contacts, customers, interests, transactions] = await Promise.all([
+                fetchContacts(),
+                fetchCustomers(),
+                fetchAllInterest(),
+                fetchAllTransactions(),
+            ]);
+            setDataContact(contacts);
+            setDataCustomer(customers);
+            setInterestData(interests);
+            setTransactionData(transactions);
+        } catch (error) {
+            console.error("Error loading customer data:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
-                const customers = await fetchCustomers();
-                setDataCustomer(customers);
+    useEffect(() => {
+        refreshAllData();
+    }, [refreshAllData]);
 
-                const interests = await fetchAllInterest();
-                setInterestData(interests);
+    // Domain queries
+    const getContactsByUserId = useCallback((userId) => {
+        if (!dataContact || !userId) return [];
+        return dataContact.filter((c) => c.userID === userId);
+    }, [dataContact]);
 
-                const transactions = await fetchAllTransactions();
-                setTransactionData(transactions);
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            }
-        };
-        loadData();
-    },[]);
+    const getInstallmentsByContractId = useCallback((contractId) => {
+        if (!dataInterest || !contractId) return [];
+        return dataInterest.filter((inst) => inst.Id_contact === contractId);
+    }, [dataInterest]);
 
+    const contextValue = {
+        // Raw state (backward compatibility)
+        dataContact,
+        setDataContact,
+        dataCustomer,
+        setDataCustomer,
+        dataInterest,
+        setInterestData,
+        dataTransaction,
+        setTransactionData,
+        modalShown,
+        toggleModal,
+        modalShown2,
+        toggleModal2,
+
+        // Deep Domain Interface Methods
+        isLoading,
+        refreshAllData,
+        getContactsByUserId,
+        getInstallmentsByContractId,
+    };
 
     return (
-        <>
-        <DataContext.Provider value={{dataContact,setDataContact,
-                                        dataCustomer,setDataCustomer,
-                                        dataInterest ,setInterestData,
-                                        dataTransaction ,setTransactionData,
-                                        modalShown, toggleModal,
-                                        modalShown2, toggleModal2}}>
+        <DataContext.Provider value={contextValue}>
             {children}
+            <ToastContainer />
         </DataContext.Provider>
-        <ToastContainer />
-        </>
-    ) 
-   
-} 
+    );
+};
 
 export default DataProvider;

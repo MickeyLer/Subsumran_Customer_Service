@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { DataContext } from './DataContext';
 import { ChevronLeft, Receipt, CheckCircle, Clock, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { DateTime } from 'luxon';
+import { getContractProgression } from './utils/installmentProgression';
 
 function LoanDetails() {
   const searchParams = useSearchParams();
@@ -34,45 +35,15 @@ function LoanDetails() {
   // Filter installments for this contract
   const installments = dataInterest ? dataInterest.filter(row => row.Id_contact === contractId) : [];
   
-  // Paid installments (Sorted newest to oldest: number_pay descending)
-  const paidInstallments = installments
-    .filter(row => row.status === 1)
-    .sort((a, b) => {
-      const numA = Number(a.number_pay) || 0;
-      const numB = Number(b.number_pay) || 0;
-      if (numA !== numB) {
-        return numB - numA;
-      }
-      const dateA = new Date(a.pay_date || a.begin_date || 0);
-      const dateB = new Date(b.pay_date || b.begin_date || 0);
-      return dateB - dateA;
-    });
-  const paidCount = paidInstallments.length;
-  const totalCount = contract ? contract.month_loan : (installments.length || 0);
-
-  // Unpaid installments
-  const unpaidInstallments = installments.filter(row => row.status !== 1);
-  const sortedUnpaid = [...unpaidInstallments].sort(
-    (a, b) => new Date(a.begin_date) - new Date(b.begin_date)
-  );
-  const nextPayment = sortedUnpaid[0];
-
-  // Next payment fee calculation
-  let nextFee = 0;
-  if (nextPayment && nextPayment.begin_date) {
-    const beginDate = new Date(nextPayment.begin_date);
-    const dueDate = new Date(beginDate.getFullYear(), beginDate.getMonth() + 1, beginDate.getDate());
-    const today = new Date();
-    const diffTime = today - dueDate;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) - 4;
-    if (diffDays > 0) {
-      nextFee = diffDays * 50;
-    }
-  }
-  const nextPayTotal = nextPayment ? Number(nextPayment.tree || 0) + Number(nextPayment.interest || 0) + nextFee : 0;
-
-  // Progression percentage
-  const progressPercent = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
+  const {
+    paidInstallments,
+    nextInstallment: nextPayment,
+    nextFee,
+    nextPayTotal,
+    paidCount,
+    totalCount,
+    progressPercent
+  } = getContractProgression(contract, installments);
 
   // Helper: Format Thai Date
   const formatThaiDate = (dateStr) => {
