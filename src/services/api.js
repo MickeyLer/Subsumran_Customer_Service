@@ -45,6 +45,16 @@ export const fetchCustomers = async () => {
     return allData;
 };
 
+export const fetchCustomerByUserId = async (userId) => {
+    if (!userId) return null;
+    const { data, error } = await supabase
+        .from('Customer')
+        .select('*')
+        .or(`userID.eq.${userId},ID.eq.${userId}`)
+        .maybeSingle();
+    return handleResponse(data, error, 'fetchCustomerByUserId');
+};
+
 export const addCustomer = async (customerData) => {
     console.log("Sending data to Supabase (Add Customer):", customerData);
     const { data, error } = await supabase
@@ -125,6 +135,25 @@ export const fetchContacts = async () => {
     return allData;
 };
 
+export const fetchContactById = async (contractId) => {
+    if (!contractId) return null;
+    const { data, error } = await supabase
+        .from('contact')
+        .select('*')
+        .eq('ID_contact', contractId)
+        .maybeSingle();
+    return handleResponse(data, error, 'fetchContactById');
+};
+
+export const fetchContactsByUser = async (userId) => {
+    if (!userId) return [];
+    const { data, error } = await supabase
+        .from('contact')
+        .select('*')
+        .eq('userID', userId);
+    return handleResponse(data, error, 'fetchContactsByUser');
+};
+
 export const updateContact = async (id, updatedData) => {
     console.log(`Updating data in Supabase (Contact ID: ${id}):`, updatedData);
     const { data, error } = await supabase
@@ -174,6 +203,16 @@ export const fetchInterestByContact = async (idContact) => {
         .eq('Id_contact', idContact)
         .order('ID', { ascending: true });
     return handleResponse(data, error, 'fetchInterestByContact');
+};
+
+export const fetchInterestByContacts = async (contractIds) => {
+    if (!contractIds || contractIds.length === 0) return [];
+    const { data, error } = await supabase
+        .from('Interest_chart')
+        .select('*')
+        .in('Id_contact', contractIds)
+        .order('ID', { ascending: true });
+    return handleResponse(data, error, 'fetchInterestByContacts');
 };
 
 export const fetchAllInterest = async () => {

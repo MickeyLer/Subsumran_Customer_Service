@@ -19,9 +19,39 @@ function Home() {
     isAdmin, 
     impersonatedCustomer, 
     switchToCustomer, 
-    resetToSelf 
+    resetToSelf,
+    isAuthLoading
   } = useContext(AuthContext);
-  const { dataContact, dataCustomer, dataInterest } = useContext(DataContext);
+  const { dataContact, dataCustomer, dataInterest, refreshUserData, ensureAdminDataLoaded } = useContext(DataContext) || {};
+
+  useEffect(() => {
+    if (userId && refreshUserData) {
+      refreshUserData(userId);
+    }
+  }, [userId, refreshUserData]);
+
+  // Dynamic Customer Name Resolver (prefers impersonated -> LIFF displayName -> DB Customer/Contact -> empty during loading)
+  const customerDisplayName = useMemo(() => {
+    if (impersonatedCustomer?.name) {
+      return impersonatedCustomer.name;
+    }
+    if (displayName) {
+      return displayName;
+    }
+    if (dataCustomer && userId) {
+      const matched = dataCustomer.find(c => c.userID === userId || c.ID === userId);
+      if (matched) {
+        const full = `${matched.name || ''} ${matched.lastname || ''}`.trim();
+        if (full) return full;
+      }
+    }
+    if (dataContact && userId) {
+      const matched = dataContact.find(c => c.userID === userId);
+      const contactName = matched?.Name_loan || matched?.name;
+      if (contactName) return contactName;
+    }
+    return '';
+  }, [impersonatedCustomer, displayName, dataCustomer, dataContact, userId]);
 
   // Build unique options list for Admin Switcher Toolbar
   const customerOptions = useMemo(() => {
@@ -30,9 +60,10 @@ function Home() {
     if (dataContact) {
       dataContact.forEach(c => {
         if (c.userID && c.userID !== realUserId && !optionsMap.has(c.userID)) {
+          const name = c.Name_loan || c.name || 'ไม่ระบุชื่อ';
           optionsMap.set(c.userID, {
             value: c.userID,
-            label: `👤 ${c.name || 'ไม่ระบุชื่อ'} (สัญญา: ${c.ID_contact || 'N/A'})`
+            label: `👤 ${name} (สัญญา: ${c.ID_contact || 'N/A'})`
           });
         }
       });
@@ -325,19 +356,23 @@ function Home() {
               </label>
               <select
                 value={userId}
+                onFocus={() => ensureAdminDataLoaded && ensureAdminDataLoaded()}
+                onClick={() => ensureAdminDataLoaded && ensureAdminDataLoaded()}
                 onChange={(e) => {
                   const selectedId = e.target.value;
                   if (selectedId === realUserId) {
                     resetToSelf();
+                    if (refreshUserData) refreshUserData(realUserId);
                   } else {
                     const matchedCustomer = (dataCustomer || []).find(c => c.userID === selectedId || c.ID === selectedId);
                     const matchedContact = (dataContact || []).find(c => c.userID === selectedId);
                     const custName = matchedCustomer 
                       ? `${matchedCustomer.name || ''} ${matchedCustomer.lastname || ''}`.trim()
                       : matchedContact 
-                      ? matchedContact.name 
+                      ? (matchedContact.Name_loan || matchedContact.name || selectedId)
                       : selectedId;
                     switchToCustomer(selectedId, { name: custName, id: selectedId });
+                    if (refreshUserData) refreshUserData(selectedId);
                   }
                 }}
                 className="w-full p-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold border-2 border-amber-200 outline-none shadow-sm cursor-pointer"
@@ -398,9 +433,16 @@ function Home() {
             {/* Greeting Text */}
             <div className="flex-grow min-w-0">
               <p className="text-label-sm font-semibold text-on-surface-variant font-sans">ยินดีต้อนรับ</p>
-              <h3 className="text-[20px] font-bold text-primary leading-snug truncate font-sans">
-                {displayName || 'คุณลูกค้า'}
-              </h3>
+              {isAuthLoading || (!customerDisplayName && (dataContact === null || dataCustomer === null)) ? (
+                <div className="flex items-center gap-2 py-1 my-0.5">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary/20 border-t-primary shrink-0"></div>
+                  <span className="text-xs text-on-surface-variant font-sans font-medium animate-pulse">กำลังโหลดข้อมูลลูกค้า...</span>
+                </div>
+              ) : (
+                <h3 className="text-[20px] font-bold text-primary leading-snug truncate font-sans">
+                  {customerDisplayName || 'คุณลูกค้า'}
+                </h3>
+              )}
               <p className="text-label-sm text-on-surface-variant font-sans mt-xs">
                 {dataContact === null
                   ? 'กำลังดึงข้อมูลสัญญา...'
@@ -806,12 +848,12 @@ function Home() {
                         <img src={pictureUrl} alt="LINE Avatar" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-primary text-[36px] font-bold">
-                          {displayName?.charAt(0) || 'U'}
+                          {(customerDisplayName || displayName)?.charAt(0) || 'U'}
                         </div>
                       )}
                     </div>
                     <div>
-                      <h4 className="text-body-lg font-bold text-primary">{displayName || 'ไม่ระบุชื่อ'}</h4>
+                      <h4 className="text-body-lg font-bold text-primary">{customerDisplayName || displayName || 'ไม่ระบุชื่อ'}</h4>
                     </div>
                   </div>
 

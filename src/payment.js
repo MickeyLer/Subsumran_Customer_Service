@@ -5,20 +5,22 @@ import PaymentWizard from "./components/PaymentWizard";
 import { useSearchParams, useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { DataContext } from './DataContext';
+import { fetchContactById, fetchInterestByContact } from './services/api';
 import { addMonths } from '@progress/kendo-date-math';
 import DateDiff from 'date-diff';
 import { ChevronLeft, CreditCard, AlertTriangle, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
 import { getContractProgression } from './utils/installmentProgression';
 
 function Pay() {
-    const { dataContact } = useContext(DataContext);
-    const { dataInterest } = useContext(DataContext);
+    const { dataContact, dataInterest, loadContractData } = useContext(DataContext) || {};
     const [modalOpen, setModalOpen] = useState(false);
 
     // Multi-select state
     const [selectedRows, setSelectedRows] = useState([]); // Array of selected installment rows
 
     const [searchtxt, setSearch] = useState('');
+    const [directContact, setDirectContact] = useState(null);
+    const [directInstallments, setDirectInstallments] = useState([]);
 
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -27,8 +29,23 @@ function Pay() {
       const idParam = searchParams.get('IDcontact');
       if (idParam) {
         setSearch(idParam);
+        let isMounted = true;
+        Promise.all([
+          fetchContactById(idParam),
+          fetchInterestByContact(idParam),
+        ]).then(([cData, iData]) => {
+          if (isMounted) {
+            if (cData) setDirectContact(cData);
+            if (iData) setDirectInstallments(iData);
+          }
+        }).catch(err => console.error("Error fetching targeted pay data:", err));
+
+        if (loadContractData) {
+          loadContractData(idParam);
+        }
+        return () => { isMounted = false; };
       }
-    }, [dataContact, searchParams]);
+    }, [searchParams, loadContractData]);
 
     function search(rows) {
       if (dataInterest !== null && searchtxt !== '') {
@@ -52,7 +69,7 @@ function Pay() {
       }
     }
 
-    const currentContact = searchDataContact(dataContact);
+    const currentContact = directContact || searchDataContact(dataContact);
 
     // Check if a row is overdue (past due date)
     const isOverdue = (row) => {
@@ -73,7 +90,10 @@ function Pay() {
     };
 
     // Find next unpaid installment & fee using Installment Progression Module
-    const installments = search(dataInterest || []);
+    const installments = directInstallments.length > 0
+      ? directInstallments
+      : search(dataInterest || []);
+
     const { nextInstallment, nextFee: calculatedFee } = getContractProgression(
       currentContact,
       installments
@@ -134,7 +154,7 @@ function Pay() {
         <div className="p-4 max-w-3xl mx-auto space-y-6">
           
           {/* Next Installment Details */}
-          {!dataInterest || searchtxt === "" ? (
+          {(!dataInterest && directInstallments.length === 0) || searchtxt === "" ? (
             <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col items-center justify-center py-12 gap-sm">
               <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary/20 border-t-primary mb-2"></div>
               <p className="text-label-md font-bold text-primary font-sans">กำลังโหลดข้อมูลชำระเงิน...</p>

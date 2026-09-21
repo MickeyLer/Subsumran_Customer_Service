@@ -1,9 +1,10 @@
 "use client";
 
 import "./invoice.css";
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DataContext } from "./DataContext";
+import { fetchInterestByReference, fetchContactById } from "./services/api";
 import { DateTime } from "luxon";
 import { BAHTTEXT } from './Numbertobath';
 import html2canvas from 'html2canvas';
@@ -15,9 +16,38 @@ export const Invoice = () => {
     const searchParams = useSearchParams();
     const router = useRouter();
     const invoiceID = searchParams.get('invoiceID');
-    const { dataInterest } = useContext(DataContext);
-    const { dataContact } = useContext(DataContext);
+    const { dataInterest, dataContact } = useContext(DataContext) || {};
     const [image2, setImage] = useState(null);
+
+    const [directInvoice, setDirectInvoice] = useState([]);
+    const [directContact, setDirectContact] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+      if (!invoiceID) {
+        setIsLoading(false);
+        return;
+      }
+      let isMounted = true;
+      setIsLoading(true);
+
+      fetchInterestByReference(invoiceID).then(async (interests) => {
+        if (!isMounted) return;
+        setDirectInvoice(interests || []);
+        if (interests && interests.length > 0 && interests[0].Id_contact) {
+          const contactObj = await fetchContactById(interests[0].Id_contact);
+          if (isMounted && contactObj) {
+            setDirectContact([contactObj]);
+          }
+        }
+        if (isMounted) setIsLoading(false);
+      }).catch(err => {
+        console.error("Error fetching invoice targeted data:", err);
+        if (isMounted) setIsLoading(false);
+      });
+
+      return () => { isMounted = false; };
+    }, [invoiceID]);
 
     function search(rows) {
       if (dataInterest && rows) {
@@ -67,8 +97,8 @@ export const Invoice = () => {
       }
     };
 
-    const invoiceData = search(dataInterest);
-    const contactData = searchDataContact(dataContact);
+    const invoiceData = directInvoice.length > 0 ? directInvoice : search(dataInterest);
+    const contactData = directContact.length > 0 ? directContact : searchDataContact(dataContact);
 
     return (
       <div className="min-h-screen bg-surface pb-20">
@@ -86,7 +116,7 @@ export const Invoice = () => {
         </div>
 
         <div className="p-4 max-w-3xl mx-auto space-y-6">
-          {(!dataInterest || invoiceData.length === 0 || contactData.length === 0) ? (
+          {(isLoading && (invoiceData.length === 0 || contactData.length === 0)) ? (
             <div className="flex flex-col justify-center items-center py-16 bg-white rounded-lg border border-outline-variant/30 shadow-sm">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent mb-4"></div>
               <p className="text-on-surface-variant font-sans text-sm">กำลังโหลดข้อมูลใบเสร็จ...</p>

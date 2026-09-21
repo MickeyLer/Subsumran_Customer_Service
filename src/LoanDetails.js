@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DataContext } from './DataContext';
+import { fetchContactById, fetchInterestByContact } from './services/api';
 import { ChevronLeft, Receipt, CheckCircle, Clock, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { getContractProgression } from './utils/installmentProgression';
@@ -12,7 +13,41 @@ function LoanDetails() {
   const router = useRouter();
   const contractId = searchParams.get('contractId');
   
-  const { dataContact, dataInterest } = useContext(DataContext);
+  const { dataContact, dataInterest, loadContractData } = useContext(DataContext) || {};
+
+  const [directContract, setDirectContract] = useState(null);
+  const [directInstallments, setDirectInstallments] = useState([]);
+  const [isDirectLoading, setIsDirectLoading] = useState(true);
+
+  useEffect(() => {
+    if (!contractId) {
+      setIsDirectLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsDirectLoading(true);
+
+    Promise.all([
+      fetchContactById(contractId),
+      fetchInterestByContact(contractId),
+    ]).then(([cData, iData]) => {
+      if (isMounted) {
+        setDirectContract(cData);
+        setDirectInstallments(iData || []);
+        setIsDirectLoading(false);
+      }
+    }).catch(err => {
+      console.error("Error fetching targeted loan details:", err);
+      if (isMounted) setIsDirectLoading(false);
+    });
+
+    if (loadContractData) {
+      loadContractData(contractId);
+    }
+
+    return () => { isMounted = false; };
+  }, [contractId, loadContractData]);
 
   // Fallback if accessed without state
   if (!contractId) {
@@ -29,11 +64,13 @@ function LoanDetails() {
     );
   }
 
-  // Find current contract details
-  const contract = dataContact ? dataContact.find(c => c.ID_contact === contractId) : null;
+  // Find current contract details (prefer direct targeted data)
+  const contract = directContract || (dataContact ? dataContact.find(c => c.ID_contact === contractId) : null);
 
-  // Filter installments for this contract
-  const installments = dataInterest ? dataInterest.filter(row => row.Id_contact === contractId) : [];
+  // Filter installments for this contract (prefer direct targeted data)
+  const installments = directInstallments.length > 0 
+    ? directInstallments 
+    : (dataInterest ? dataInterest.filter(row => row.Id_contact === contractId) : []);
   
   const {
     paidInstallments,

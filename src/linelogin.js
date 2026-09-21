@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [userId, setUserId] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [impersonatedCustomer, setImpersonatedCustomer] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const logout = () => {
     liff.logout();
@@ -33,20 +34,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   const initLine = async () => {
-    // Set user data (for testing or LIFF login)
-    const currentUserId = "U2cd360ba05fa93c6907ca768afb9a458";
-    setRealUserId(currentUserId);
-    setUserId(currentUserId);
-    setDisplayName("คุณทรัพย์สำราญ");
-    setPictureUrl("");
-
-    // Check if realUserId is in admin_users table
+    setIsAuthLoading(true);
     try {
+      // Set user data (for testing or LIFF login)
+      const currentUserId = "U2cd360ba05fa93c6907ca768afb9a458";
+      setRealUserId(currentUserId);
+      setUserId(currentUserId);
+      setDisplayName("คุณทรัพย์สำราญ");
+      setPictureUrl("");
+
+      // Check if realUserId is in admin_users table
       const adminStatus = await checkIsAdmin(currentUserId);
       setIsAdmin(adminStatus);
     } catch (err) {
       console.error("Error evaluating admin status:", err);
       setIsAdmin(false);
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
@@ -62,6 +66,7 @@ export const AuthProvider = ({ children }) => {
       pictureUrl,
       isAdmin,
       impersonatedCustomer,
+      isAuthLoading,
       switchToCustomer,
       resetToSelf
     }}>
