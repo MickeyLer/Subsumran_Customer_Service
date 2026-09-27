@@ -46,13 +46,12 @@ export const fetchCustomers = async () => {
 };
 
 export const fetchCustomerByUserId = async (userId) => {
-    if (!userId) return null;
+    if (!userId) return [];
     const { data, error } = await supabase
         .from('Customer')
         .select('*')
-        .or(`userID.eq.${userId},ID.eq.${userId}`)
-        .maybeSingle();
-    return handleResponse(data, error, 'fetchCustomerByUserId');
+        .or(`userID.eq.${userId},ID.eq.${userId}`);
+    return handleResponse(data, error, 'fetchCustomerByUserId') || [];
 };
 
 export const addCustomer = async (customerData) => {
@@ -102,7 +101,8 @@ export {
     uploadProfilePhoto as uploadProfilePhotoToFirebase,
     uploadCompanyLogo as uploadCompanyLogoToFirebase,
     uploadContractPDF as uploadContractPDFToFirebase,
-    fetchContractPDFUrl
+    fetchContractPDFUrl,
+    fetchReceiptPDFUrl
 } from './storageSeam';
 
 

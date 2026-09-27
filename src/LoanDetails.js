@@ -85,12 +85,26 @@ function LoanDetails() {
   // Helper: Format Thai Date
   const formatThaiDate = (dateStr) => {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    const str = String(dateStr).trim();
     const months = [
       'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
       'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
     ];
-    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
+
+    // If DD/MM/YYYY format e.g. "27/09/2026"
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+      const parts = str.split('/');
+      const day = parseInt(parts[0], 10);
+      const mIdx = parseInt(parts[1], 10) - 1;
+      const yr = parseInt(parts[2], 10);
+      const displayYr = yr > 2400 ? yr : yr + 543;
+      return `${day} ${months[mIdx] || ''} ${displayYr}`;
+    }
+
+    const date = new Date(str);
+    if (isNaN(date.getTime())) return str;
+    const year = date.getFullYear() > 2400 ? date.getFullYear() : date.getFullYear() + 543;
+    return `${date.getDate()} ${months[date.getMonth()]} ${year}`;
   };
 
   const handlePay = () => {
@@ -280,7 +294,15 @@ function LoanDetails() {
               ) : (
                 <div className="divide-y divide-outline-variant/10 font-sans max-h-[300px] overflow-y-auto">
                   {paidInstallments.map((item, idx) => {
-                    const totalPaid = Number(item.paytree || 0) + Number(item.payinter || 0) + Number(item.payfee2 || 0) + Number(item.payfee3 || 0) - Number(item.dis_fee2 || 0) - Number(item.dis_fee3 || 0) + Number(item.accu || 0);
+                    const fee2Net = Number(item.payfee2 || 0) > 0 ? Number(item.payfee2 || 0) - Number(item.dis_fee2 || 0) : 0;
+                    const fee3Net = Number(item.payfee3 || 0) > 0 ? Number(item.payfee3 || 0) - Number(item.dis_fee3 || 0) : 0;
+                    const totalPaid = Math.round(
+                      Number(item.paytree || 0) + 
+                      Number(item.payinter || 0) + 
+                      fee2Net + 
+                      fee3Net + 
+                      Number(item.accu || 0)
+                    );
                     return (
                       <div key={idx} className="p-md flex items-center justify-between hover:bg-slate-50 transition-colors">
                         <div>

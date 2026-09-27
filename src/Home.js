@@ -53,36 +53,75 @@ function Home() {
     return '';
   }, [impersonatedCustomer, displayName, dataCustomer, dataContact, userId]);
 
-  // Build unique options list for Admin Switcher Toolbar
-  const customerOptions = useMemo(() => {
-    const optionsMap = new Map();
-    
+  // Admin Switcher Autocomplete State
+  const [adminSearchQuery, setAdminSearchQuery] = useState('');
+  const [isAdminSearchOpen, setIsAdminSearchOpen] = useState(false);
+
+  // Build searchable items list (Contracts + Customers) for Autocomplete
+  const searchableAdminItems = useMemo(() => {
+    const items = [];
+    const seenKeys = new Set();
+
     if (dataContact) {
       dataContact.forEach(c => {
-        if (c.userID && c.userID !== realUserId && !optionsMap.has(c.userID)) {
-          const name = c.Name_loan || c.name || 'ไม่ระบุชื่อ';
-          optionsMap.set(c.userID, {
-            value: c.userID,
-            label: `👤 ${name} (สัญญา: ${c.ID_contact || 'N/A'})`
-          });
-        }
+        if (!c.userID || c.userID === realUserId) return;
+        const key = `${c.ID_contact}_${c.userID}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+
+        const custName = c.Name_loan || c.name || 'ไม่ระบุชื่อ';
+        const contractNo = c.ID_contact || '-';
+        const searchStr = `${contractNo} ${custName} ${c.userID}`.toLowerCase();
+
+        items.push({
+          contractNo: contractNo,
+          customerName: custName,
+          userId: c.userID,
+          totalLoan: c.total_loan,
+          totalTreerest: c.total_treerest,
+          status: c.total_treerest > 0 ? 'ผ่อนชำระ' : (c.total_treerest === 0 ? 'ปิดบัญชีแล้ว' : 'สัญญา'),
+          searchStr: searchStr,
+          type: 'contract'
+        });
       });
     }
 
     if (dataCustomer) {
       dataCustomer.forEach(c => {
         const uid = c.userID || c.ID;
-        if (uid && uid !== realUserId && !optionsMap.has(uid)) {
-          optionsMap.set(uid, {
-            value: uid,
-            label: `👤 ${c.name || ''} ${c.lastname || ''}`.trim() || uid
-          });
-        }
+        if (!uid || uid === realUserId) return;
+        const fullName = `${c.name || ''} ${c.lastname || ''}`.trim() || 'ลูกค้าไม่ระบุชื่อ';
+        const key = `cust_${uid}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+
+        const searchStr = `${fullName} ${uid}`.toLowerCase();
+        items.push({
+          contractNo: '-',
+          customerName: fullName,
+          userId: uid,
+          totalLoan: null,
+          totalTreerest: null,
+          status: 'บัญชีลูกค้า',
+          searchStr: searchStr,
+          type: 'customer'
+        });
       });
     }
 
-    return Array.from(optionsMap.values());
+    return items;
   }, [dataContact, dataCustomer, realUserId]);
+
+  // Filtered Autocomplete Results
+  const filteredAdminResults = useMemo(() => {
+    if (!adminSearchQuery.trim()) {
+      return searchableAdminItems.slice(0, 15);
+    }
+    const query = adminSearchQuery.trim().toLowerCase();
+    return searchableAdminItems
+      .filter(item => item.searchStr.includes(query))
+      .slice(0, 25);
+  }, [adminSearchQuery, searchableAdminItems]);
 
   const [activeModal, setActiveModal] = useState(null); // 'profile' | 'contact' | 'bank' | 'savings' | 'services' | 'contractSelect' | 'registerNotify' | null
   const [activeTab, setActiveTab] = useState('home'); // bottom nav tab sync
@@ -331,65 +370,161 @@ function Home() {
       {/* Main Container */}
       <main className="mt-16 w-full max-w-[600px] px-gutter py-md flex-grow flex flex-col gap-lg">
         
-        {/* ADMIN CUSTOMER SWITCHER TOOLBAR */}
+        {/* ADMIN CUSTOMER SWITCHER TOOLBAR WITH AUTOCOMPLETE */}
         {isAdmin && (
-          <div className="w-full bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 text-white rounded-xl p-md shadow-md border-2 border-amber-300 flex flex-col gap-xs font-sans">
-            <div className="flex items-center justify-between border-b border-amber-400/40 pb-xs">
+          <div className="w-full bg-gradient-to-r from-amber-800 via-amber-700 to-amber-800 text-white rounded-xl p-md shadow-lg border-2 border-amber-300 flex flex-col gap-sm font-sans relative z-40">
+            <div className="flex items-center justify-between border-b border-amber-400/30 pb-xs">
               <div className="flex items-center gap-xs text-xs font-bold uppercase tracking-wider text-amber-100">
                 <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
-                <span>🛡️ Admin Switcher Toolbar</span>
+                <span>🛡️ Admin Switcher (พิมพ์ค้นหาเลขที่สัญญา/ชื่อ)</span>
               </div>
               {userId !== realUserId && (
                 <button
-                  onClick={() => resetToSelf()}
+                  onClick={() => {
+                    resetToSelf();
+                    setAdminSearchQuery('');
+                    setIsAdminSearchOpen(false);
+                    if (refreshUserData) refreshUserData(realUserId);
+                  }}
                   className="text-xs font-bold bg-white text-amber-900 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-all active:scale-95 flex items-center gap-1 shadow-sm"
                 >
                   <span className="material-symbols-outlined text-[14px]">restart_alt</span>
-                  <span>รีเซ็ตมุมมอง</span>
+                  <span>รีเซ็ตมุมมอง (กลับหน้าตัวเอง)</span>
                 </button>
               )}
             </div>
 
-            <div className="flex flex-col gap-1 mt-xs">
-              <label className="text-xs text-amber-100 font-bold">
-                เลือกสลับมุมมองลูกค้า (Impersonate Customer View):
+            {/* Autocomplete Input Container */}
+            <div className="relative w-full">
+              <label className="text-xs text-amber-100 font-bold mb-1 block">
+                ค้นหาเลขที่สัญญา หรือ ชื่อลูกค้า:
               </label>
-              <select
-                value={userId}
-                onFocus={() => ensureAdminDataLoaded && ensureAdminDataLoaded()}
-                onClick={() => ensureAdminDataLoaded && ensureAdminDataLoaded()}
-                onChange={(e) => {
-                  const selectedId = e.target.value;
-                  if (selectedId === realUserId) {
-                    resetToSelf();
-                    if (refreshUserData) refreshUserData(realUserId);
-                  } else {
-                    const matchedCustomer = (dataCustomer || []).find(c => c.userID === selectedId || c.ID === selectedId);
-                    const matchedContact = (dataContact || []).find(c => c.userID === selectedId);
-                    const custName = matchedCustomer 
-                      ? `${matchedCustomer.name || ''} ${matchedCustomer.lastname || ''}`.trim()
-                      : matchedContact 
-                      ? (matchedContact.Name_loan || matchedContact.name || selectedId)
-                      : selectedId;
-                    switchToCustomer(selectedId, { name: custName, id: selectedId });
-                    if (refreshUserData) refreshUserData(selectedId);
-                  }
-                }}
-                className="w-full p-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold border-2 border-amber-200 outline-none shadow-sm cursor-pointer"
-              >
-                <option value={realUserId}>-- 👑 มุมมองแอดมิน (หน้าของตัวเอง: {displayName}) --</option>
-                {customerOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              
+              <div className="relative flex items-center">
+                <span className="material-symbols-outlined absolute left-3 text-amber-700 text-[20px] pointer-events-none">
+                  search
+                </span>
+                
+                <input
+                  type="text"
+                  value={adminSearchQuery}
+                  onFocus={() => {
+                    if (ensureAdminDataLoaded) ensureAdminDataLoaded();
+                    setIsAdminSearchOpen(true);
+                  }}
+                  onChange={(e) => {
+                    setAdminSearchQuery(e.target.value);
+                    setIsAdminSearchOpen(true);
+                  }}
+                  placeholder="พิมพ์เลขที่สัญญา (เช่น 18/2567) หรือ ชื่อลูกค้า..."
+                  className="w-full pl-10 pr-10 py-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold border-2 border-amber-200 outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
+                />
+
+                {adminSearchQuery && (
+                  <button
+                    onClick={() => {
+                      setAdminSearchQuery('');
+                      setIsAdminSearchOpen(true);
+                    }}
+                    className="absolute right-3 text-gray-400 hover:text-gray-600 flex items-center justify-center p-1"
+                    aria-label="ล้างคำค้นหา"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">close</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Autocomplete Dropdown Menu */}
+              {isAdminSearchOpen && (
+                <>
+                  {/* Backdrop to close when clicking outside */}
+                  <div 
+                    className="fixed inset-0 z-30" 
+                    onClick={() => setIsAdminSearchOpen(false)} 
+                  />
+
+                  <div className="absolute top-full left-0 right-0 mt-1.5 bg-white text-gray-900 rounded-xl shadow-2xl border-2 border-amber-400 max-h-72 overflow-y-auto z-40 divide-y divide-gray-100 font-sans">
+                    <div className="px-md py-1.5 bg-amber-50 text-amber-900 text-[11px] font-bold flex justify-between items-center border-b border-amber-200 sticky top-0 z-10">
+                      <span>{adminSearchQuery ? `ผลการค้นหา (${filteredAdminResults.length} รายการ)` : `รายการสัญญาทั้งหมด (เลือกเพื่อสลับมุมมอง)`}</span>
+                      <button 
+                        onClick={() => setIsAdminSearchOpen(false)}
+                        className="text-amber-700 hover:text-amber-900 text-xs font-bold"
+                      >
+                        ปิด ✕
+                      </button>
+                    </div>
+
+                    {filteredAdminResults.length === 0 ? (
+                      <div className="p-md text-center text-xs text-gray-500">
+                        ไม่พบเลขที่สัญญาหรือชื่อลูกค้าที่ตรงกับ "{adminSearchQuery}"
+                      </div>
+                    ) : (
+                      filteredAdminResults.map((item, idx) => (
+                        <div
+                          key={`${item.userId}_${item.contractNo}_${idx}`}
+                          onClick={() => {
+                            switchToCustomer(item.userId, { name: item.customerName, id: item.userId });
+                            setAdminSearchQuery(item.contractNo !== '-' ? `สัญญา: ${item.contractNo} (${item.customerName})` : item.customerName);
+                            setIsAdminSearchOpen(false);
+                            if (refreshUserData) refreshUserData(item.userId);
+                          }}
+                          className={`p-md hover:bg-amber-50 cursor-pointer transition-all flex justify-between items-center ${
+                            userId === item.userId ? 'bg-amber-100/70 font-bold border-l-4 border-amber-600' : ''
+                          }`}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                              {item.contractNo !== '-' && (
+                                <span className="bg-amber-700 text-white font-mono text-xs px-2 py-0.5 rounded font-bold">
+                                  {item.contractNo}
+                                </span>
+                              )}
+                              <span className="text-sm font-bold text-gray-900">
+                                {item.customerName}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                              {item.totalLoan && (
+                                <span>วงเงิน: <strong>{item.totalLoan.toLocaleString()} ฿</strong></span>
+                              )}
+                              <span className="font-mono text-[10px] text-gray-400">ID: {item.userId.substring(0, 10)}...</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              item.status === 'ผ่อนชำระ'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : item.status === 'ปิดบัญชีแล้ว'
+                                ? 'bg-green-100 text-green-700 border border-green-300'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {item.status}
+                            </span>
+                            {userId === item.userId && (
+                              <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[12px]">visibility</span> เลือกอยู่
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
+            {/* Currently Active Impersonation Indicator */}
             {userId !== realUserId && (
-              <div className="bg-black/20 p-sm rounded-lg text-xs text-amber-100 flex items-center justify-between mt-xs border border-amber-300/30">
-                <span>👀 กำลังจำลองมุมมองของ: <strong className="text-white">{impersonatedCustomer?.name || userId}</strong></span>
-                <span className="bg-amber-900/60 px-2 py-0.5 rounded text-[10px] font-mono">ID: {userId.substring(0, 12)}...</span>
+              <div className="bg-black/25 p-sm rounded-lg text-xs text-amber-100 flex items-center justify-between border border-amber-300/30 font-sans">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  กำลังสวมบทบาทดูลูกค้า: <strong className="text-white font-bold">{customerDisplayName || impersonatedCustomer?.name || userId}</strong>
+                </span>
+                <span className="bg-amber-900/60 px-2 py-0.5 rounded text-[10px] font-mono text-amber-200">
+                  ID: {userId.substring(0, 12)}...
+                </span>
               </div>
             )}
           </div>
@@ -598,6 +733,17 @@ function Home() {
 
                   {/* Contract Info */}
                   <div className="bg-primary/5 rounded-lg border border-primary/10 p-md flex flex-col gap-md">
+                    {/* Borrower Name Badge */}
+                    <div className="bg-amber-50 border border-amber-200/90 rounded-lg px-3 py-1.5 flex items-center justify-between shadow-xs">
+                      <div className="flex items-center gap-1.5 text-xs text-amber-950 font-bold font-sans">
+                        <span className="material-symbols-outlined text-[18px] text-amber-700">person</span>
+                        <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
+                      </div>
+                      <span className="text-[10px] text-amber-800 font-mono font-bold bg-amber-100/80 px-1.5 py-0.5 rounded">
+                        สัญญา {c.ID_contact}
+                      </span>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-md">
                       <div>
                         <p className="text-label-sm text-on-surface-variant font-sans">เลขที่สัญญา</p>
@@ -890,6 +1036,10 @@ function Home() {
                               <span className="bg-secondary-container text-on-secondary-container text-[10px] font-bold px-2 py-0.5 rounded-full">กำลังผ่อนชำระ</span>
                             )}
                           </div>
+                          <div className="text-xs text-amber-950 font-bold bg-amber-50 px-2.5 py-1 rounded border border-amber-200/70 flex items-center gap-1 font-sans">
+                            <span className="material-symbols-outlined text-[16px] text-amber-700">person</span>
+                            <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
+                          </div>
                           <div className="grid grid-cols-2 gap-xs text-[12px] text-on-surface-variant">
                             <p>ยอดวงเงินกู้: <span className="font-bold">{c.total_loan?.toLocaleString()} ฿</span></p>
                             <p>ค่างวด: <span className="font-bold">{c.paypermonth?.toLocaleString()} ฿/{c.month_loan}ด.</span></p>
@@ -1083,6 +1233,10 @@ function Home() {
                         >
                           <div>
                             <p className="text-body-md font-bold text-primary">เลขที่สัญญา: {c.ID_contact}</p>
+                            <p className="text-xs text-amber-950 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 inline-flex items-center gap-1 mt-0.5">
+                              <span className="material-symbols-outlined text-[14px] text-amber-700">person</span>
+                              <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
+                            </p>
                             <p className="text-label-sm text-on-surface-variant mt-xs">
                               ยอดวงเงินกู้: <span className="font-bold">{c.total_loan?.toLocaleString()} ฿</span> | ค่างวด: <span className="font-bold text-primary">{c.paypermonth?.toLocaleString()} ฿</span>
                             </p>

@@ -72,6 +72,50 @@ const firebaseStorageAdapter = {
       return null;
     }
   },
+
+  fetchReceiptPDFUrl: async (invoiceID) => {
+    if (!invoiceID) return null;
+    const safeInvoiceID = String(invoiceID).replace(/\//g, '-');
+    const safeInvoiceIDUnderscore = String(invoiceID).replace(/\//g, '_');
+    const pathsToTry = [
+      `receipts/Invoice_${invoiceID}.pdf`,
+      `receipts/Invoice_${safeInvoiceID}.pdf`,
+      `receipts/Invoice_${safeInvoiceIDUnderscore}.pdf`,
+      `receipts/${safeInvoiceID}.pdf`,
+      `receipts/${safeInvoiceIDUnderscore}.pdf`,
+      `receipts/Invoice_${invoiceID}.png`,
+      `receipts/Invoice_${safeInvoiceID}.png`,
+      `receipts/Invoice_${invoiceID}.jpg`,
+      `receipts/Invoice_${safeInvoiceID}.jpg`
+    ];
+
+    for (const pathStr of pathsToTry) {
+      try {
+        const storageRef = ref(storage, pathStr);
+        const url = await getDownloadURL(storageRef);
+        if (url) return url;
+      } catch (err) {
+        // Continue checking next path
+      }
+    }
+
+    try {
+      const folderRef = ref(storage, 'receipts_img/');
+      const res = await listAll(folderRef);
+      const match = res.items.find(item => 
+        item.name.startsWith(`${safeInvoiceID}_`) || 
+        item.name.startsWith(`${safeInvoiceIDUnderscore}_`) ||
+        item.name.startsWith(`${invoiceID}_`)
+      );
+      if (match) {
+        return await getDownloadURL(match);
+      }
+    } catch (err) {
+      // Ignore folder listing error
+    }
+
+    return null;
+  }
 };
 
 // Active adapter (defaults to production Firebase Storage)
@@ -92,6 +136,8 @@ export const deleteFileFromStorage = (path) => activeAdapter.deleteFile(path);
 export const deleteFolderFromStorage = (folderPath) => activeAdapter.deleteFolder(folderPath);
 
 export const fetchContractPDFUrl = (contractId, fileName) => activeAdapter.fetchPDFUrl(contractId, fileName);
+
+export const fetchReceiptPDFUrl = (invoiceID) => activeAdapter.fetchReceiptPDFUrl ? activeAdapter.fetchReceiptPDFUrl(invoiceID) : firebaseStorageAdapter.fetchReceiptPDFUrl(invoiceID);
 
 export const uploadCustomerPhoto = async (file, customerId) => {
   try {

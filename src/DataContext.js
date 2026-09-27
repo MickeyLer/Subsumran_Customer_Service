@@ -40,42 +40,62 @@ export const DataProvider = ({ children }) => {
      * Reduces initial payload size by ~99% for regular customer LIFF sessions.
      */
     const refreshUserData = useCallback(async (targetUserId) => {
-        if (!targetUserId) return;
+        if (!targetUserId) {
+            setDataContact(prev => prev || []);
+            setDataCustomer(prev => prev || []);
+            setInterestData(prev => prev || []);
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         try {
-            const [userContacts, userCustomer] = await Promise.all([
-                fetchContactsByUser(targetUserId),
-                fetchCustomerByUserId(targetUserId),
-            ]);
+            const userContacts = await fetchContactsByUser(targetUserId).catch(err => {
+                console.error("Error fetching contacts by user:", err);
+                return [];
+            });
+            const userCustomers = await fetchCustomerByUserId(targetUserId).catch(err => {
+                console.error("Error fetching customer by user:", err);
+                return [];
+            });
 
             const contractIds = (userContacts || []).map(c => c.ID_contact).filter(Boolean);
             const userInterests = contractIds.length > 0 
-                ? await fetchInterestByContacts(contractIds)
+                ? await fetchInterestByContacts(contractIds).catch(err => {
+                    console.error("Error fetching interests by contacts:", err);
+                    return [];
+                })
                 : [];
 
             setDataContact((prev) => {
-                if (!prev) return userContacts;
-                // Merge without duplicates
+                const fetched = userContacts || [];
+                if (!prev) return fetched;
                 const prevIds = new Set(prev.map(c => c.ID_contact));
-                const newItems = userContacts.filter(c => !prevIds.has(c.ID_contact));
+                const newItems = fetched.filter(c => !prevIds.has(c.ID_contact));
                 return [...prev, ...newItems];
             });
 
             setDataCustomer((prev) => {
-                if (!prev) return userCustomer ? [userCustomer] : [];
-                if (!userCustomer) return prev;
-                const exists = prev.some(c => c.ID === userCustomer.ID || c.userID === userCustomer.userID);
-                return exists ? prev : [...prev, userCustomer];
+                const fetched = Array.isArray(userCustomers) 
+                    ? userCustomers 
+                    : (userCustomers ? [userCustomers] : []);
+                if (!prev) return fetched;
+                const prevIds = new Set(prev.map(c => c.ID || c.userID));
+                const newItems = fetched.filter(c => !prevIds.has(c.ID || c.userID));
+                return [...prev, ...newItems];
             });
 
             setInterestData((prev) => {
-                if (!prev) return userInterests;
+                const fetched = userInterests || [];
+                if (!prev) return fetched;
                 const prevKeys = new Set(prev.map(i => `${i.Id_contact}_${i.number_pay}`));
-                const newItems = userInterests.filter(i => !prevKeys.has(`${i.Id_contact}_${i.number_pay}`));
+                const newItems = fetched.filter(i => !prevKeys.has(`${i.Id_contact}_${i.number_pay}`));
                 return [...prev, ...newItems];
             });
         } catch (error) {
             console.error("Error loading targeted customer data:", error);
+            setDataContact(prev => prev || []);
+            setDataCustomer(prev => prev || []);
+            setInterestData(prev => prev || []);
         } finally {
             setIsLoading(false);
         }
