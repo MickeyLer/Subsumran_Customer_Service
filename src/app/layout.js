@@ -6,6 +6,20 @@ import Providers from './providers';
 export const metadata = {
   title: 'LINE LIFF Customer Service - ทรัพย์สำราญ พิโก',
   description: 'ระบบบริการลูกค้า สัญญาเงินกู้และออมทอง ทรัพย์สำราญ พิโก',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'ทรัพย์สำราญ',
+  },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1.0,
+  maximumScale: 1.0,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#00193c',
 };
 
 export default function RootLayout({ children }) {

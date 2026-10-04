@@ -414,7 +414,7 @@ function Home() {
                     setIsAdminSearchOpen(true);
                   }}
                   placeholder="พิมพ์เลขที่สัญญา (เช่น 18/2567) หรือ ชื่อลูกค้า..."
-                  className="w-full pl-10 pr-10 py-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold font-sans border-2 border-amber-200 outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-lg text-base bg-white text-gray-900 font-bold font-sans border-2 border-amber-200 outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
                 />
 
                 {adminSearchQuery && (
@@ -946,7 +946,7 @@ function Home() {
                             placeholder="ตัวอย่าง: นายสมชาย ใจดี"
                             value={registerForm.borrowerName}
                             onChange={(e) => setRegisterForm({ ...registerForm, borrowerName: e.target.value })}
-                            className="w-full px-md py-2.5 rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all"
+                            className="w-full px-md py-2.5 rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-base transition-all"
                           />
                         </div>
 
@@ -958,7 +958,7 @@ function Home() {
                             placeholder="ตัวอย่าง: 67/0001"
                             value={registerForm.contractNo}
                             onChange={(e) => setRegisterForm({ ...registerForm, contractNo: e.target.value })}
-                            className="w-full px-md py-2.5 rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all"
+                            className="w-full px-md py-2.5 rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-base transition-all"
                           />
                         </div>
                       </div>
