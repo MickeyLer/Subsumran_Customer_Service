@@ -19,7 +19,13 @@ export const AuthProvider = ({ children }) => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const logout = () => {
-    liff.logout();
+    try {
+      if (typeof window !== 'undefined' && liff.isLoggedIn()) {
+        liff.logout();
+      }
+    } catch (err) {
+      console.error("Error logging out from LIFF:", err);
+    }
     window.location.reload();
   };
 
@@ -35,16 +41,54 @@ export const AuthProvider = ({ children }) => {
 
   const initLine = async () => {
     setIsAuthLoading(true);
-    try {
-      // Set user data (for testing or LIFF login)
-      const currentUserId = "U2cd360ba05fa93c6907ca768afb9a458";
-      setRealUserId(currentUserId);
-      setUserId(currentUserId);
-      setDisplayName("คุณทรัพย์สำราญ");
-      setPictureUrl("");
 
-      // Check if realUserId is in admin_users table
-      const adminStatus = await checkIsAdmin(currentUserId);
+    const liffId = process.env.NEXT_PUBLIC_LIFF_ID || process.env.REACT_APP_LIFF_ID;
+
+    if (liffId) {
+      try {
+        await liff.init({ liffId });
+
+        if (liff.isLoggedIn()) {
+          const profile = await liff.getProfile();
+          const token = liff.getIDToken();
+
+          setRealUserId(profile.userId);
+          setUserId(profile.userId);
+          setDisplayName(profile.displayName || "");
+          setPictureUrl(profile.pictureUrl || "");
+          setIdToken(token || "");
+
+          const adminStatus = await checkIsAdmin(profile.userId);
+          setIsAdmin(adminStatus);
+          setIsAuthLoading(false);
+          return;
+        } else {
+          // If inside LINE app or opened via LIFF URL, trigger login flow
+          if (liff.isInClient()) {
+            liff.login();
+            return;
+          } else {
+            // Opened in external browser with configured LIFF ID
+            liff.login();
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("LIFF initialization error:", err);
+      }
+    } else {
+      console.warn("NEXT_PUBLIC_LIFF_ID is not defined in environment variables. Falling back to default test profile.");
+    }
+
+    // Fallback for local development or testing without LIFF ID / outside LINE browser
+    const fallbackUserId = "U2cd360ba05fa93c6907ca768afb9a458";
+    setRealUserId(fallbackUserId);
+    setUserId(fallbackUserId);
+    setDisplayName("คุณทรัพย์สำราญ");
+    setPictureUrl("");
+
+    try {
+      const adminStatus = await checkIsAdmin(fallbackUserId);
       setIsAdmin(adminStatus);
     } catch (err) {
       console.error("Error evaluating admin status:", err);
@@ -64,11 +108,13 @@ export const AuthProvider = ({ children }) => {
       realUserId,
       displayName,
       pictureUrl,
+      idToken,
       isAdmin,
       impersonatedCustomer,
       isAuthLoading,
       switchToCustomer,
-      resetToSelf
+      resetToSelf,
+      logout
     }}>
       {children}
     </AuthContext.Provider>

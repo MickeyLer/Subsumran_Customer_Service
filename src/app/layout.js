@@ -4,8 +4,8 @@ import '../App.css';
 import Providers from './providers';
 
 export const metadata = {
-  title: 'LINE LIFF Customer Service - ทรัพย์สำราญ พีโก',
-  description: 'ระบบบริการลูกค้า สัญญาเงินกู้และออมทอง ทรัพย์สำราญ พีโก',
+  title: 'LINE LIFF Customer Service - ทรัพย์สำราญ พิโก',
+  description: 'ระบบบริการลูกค้า สัญญาเงินกู้และออมทอง ทรัพย์สำราญ พิโก',
 };
 
 export default function RootLayout({ children }) {

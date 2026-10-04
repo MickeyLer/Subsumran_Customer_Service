@@ -7,7 +7,7 @@ import { DataContext } from './DataContext';
 import Swal from 'sweetalert2';
 import logo from './Logo.png';
 import RichMenuGrid from './components/RichMenuGrid';
-import { getContractProgression, getOverallProgression } from './utils/installmentProgression';
+import { getContractProgression, getOverallProgression, formatThaiDate } from './utils/installmentProgression';
 
 function Home() {
   const router = useRouter();
@@ -56,6 +56,12 @@ function Home() {
   // Admin Switcher Autocomplete State
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
   const [isAdminSearchOpen, setIsAdminSearchOpen] = useState(false);
+  const [navigatingContractId, setNavigatingContractId] = useState(null);
+
+  const handleNavigateDetail = (contractId) => {
+    setNavigatingContractId(contractId);
+    router.push(`/LoanDetails?contractId=${encodeURIComponent(contractId)}`);
+  };
 
   // Build searchable items list (Contracts + Customers) for Autocomplete
   const searchableAdminItems = useMemo(() => {
@@ -247,16 +253,7 @@ function Home() {
     return getOverallProgression(activeContacts, dataInterest || []);
   }, [activeContacts, dataInterest]);
 
-  // Helper: Format Thai Date
-  const formatThaiDate = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const months = [
-      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-    ];
-    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
-  };
+
 
   const formatThaiMonthYear = (dateStr) => {
     if (!dateStr) return '';
@@ -343,7 +340,7 @@ function Home() {
           >
             <span className="material-symbols-outlined text-[28px]">widgets</span>
           </button>
-          <h1 className="text-headline-sm font-bold text-secondary-fixed leading-none tracking-tight">ทรัพย์สำราญ พีโก</h1>
+          <h1 className="text-headline-sm font-bold text-secondary-fixed leading-none tracking-tight">ทรัพย์สำราญ พิโก</h1>
         </div>
         <div className="flex items-center gap-sm">
           <button 
@@ -374,9 +371,9 @@ function Home() {
         {isAdmin && (
           <div className="w-full bg-gradient-to-r from-amber-800 via-amber-700 to-amber-800 text-white rounded-xl p-md shadow-lg border-2 border-amber-300 flex flex-col gap-sm font-sans relative z-40">
             <div className="flex items-center justify-between border-b border-amber-400/30 pb-xs">
-              <div className="flex items-center gap-xs text-xs font-bold uppercase tracking-wider text-amber-100">
+              <div className="flex items-center gap-xs text-xs font-bold text-amber-100 font-sans">
                 <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
-                <span>🛡️ Admin Switcher (พิมพ์ค้นหาเลขที่สัญญา/ชื่อ)</span>
+                <span>🛡️ Admin Switcher</span>
               </div>
               {userId !== realUserId && (
                 <button
@@ -386,21 +383,21 @@ function Home() {
                     setIsAdminSearchOpen(false);
                     if (refreshUserData) refreshUserData(realUserId);
                   }}
-                  className="text-xs font-bold bg-white text-amber-900 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+                  className="text-xs font-bold bg-white text-amber-900 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-all active:scale-95 flex items-center gap-1 shadow-sm font-sans"
                 >
                   <span className="material-symbols-outlined text-[14px]">restart_alt</span>
-                  <span>รีเซ็ตมุมมอง (กลับหน้าตัวเอง)</span>
+                  <span>รีเซ็ตมุมมอง</span>
                 </button>
               )}
             </div>
 
             {/* Autocomplete Input Container */}
             <div className="relative w-full">
-              <label className="text-xs text-amber-100 font-bold mb-1 block">
+              <label className="text-xs text-amber-100 font-bold mb-1 block font-sans">
                 ค้นหาเลขที่สัญญา หรือ ชื่อลูกค้า:
               </label>
               
-              <div className="relative flex items-center">
+              <div className="relative flex items-center font-sans">
                 <span className="material-symbols-outlined absolute left-3 text-amber-700 text-[20px] pointer-events-none">
                   search
                 </span>
@@ -417,7 +414,7 @@ function Home() {
                     setIsAdminSearchOpen(true);
                   }}
                   placeholder="พิมพ์เลขที่สัญญา (เช่น 18/2567) หรือ ชื่อลูกค้า..."
-                  className="w-full pl-10 pr-10 py-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold border-2 border-amber-200 outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-lg text-sm bg-white text-gray-900 font-bold font-sans border-2 border-amber-200 outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
                 />
 
                 {adminSearchQuery && (
@@ -444,18 +441,18 @@ function Home() {
                   />
 
                   <div className="absolute top-full left-0 right-0 mt-1.5 bg-white text-gray-900 rounded-xl shadow-2xl border-2 border-amber-400 max-h-72 overflow-y-auto z-40 divide-y divide-gray-100 font-sans">
-                    <div className="px-md py-1.5 bg-amber-50 text-amber-900 text-[11px] font-bold flex justify-between items-center border-b border-amber-200 sticky top-0 z-10">
+                    <div className="px-md py-1.5 bg-amber-50 text-amber-900 text-[11px] font-bold flex justify-between items-center border-b border-amber-200 sticky top-0 z-10 font-sans">
                       <span>{adminSearchQuery ? `ผลการค้นหา (${filteredAdminResults.length} รายการ)` : `รายการสัญญาทั้งหมด (เลือกเพื่อสลับมุมมอง)`}</span>
                       <button 
                         onClick={() => setIsAdminSearchOpen(false)}
-                        className="text-amber-700 hover:text-amber-900 text-xs font-bold"
+                        className="text-amber-700 hover:text-amber-900 text-xs font-bold font-sans"
                       >
                         ปิด ✕
                       </button>
                     </div>
 
                     {filteredAdminResults.length === 0 ? (
-                      <div className="p-md text-center text-xs text-gray-500">
+                      <div className="p-md text-center text-xs text-gray-500 font-sans">
                         ไม่พบเลขที่สัญญาหรือชื่อลูกค้าที่ตรงกับ "{adminSearchQuery}"
                       </div>
                     ) : (
@@ -468,31 +465,31 @@ function Home() {
                             setIsAdminSearchOpen(false);
                             if (refreshUserData) refreshUserData(item.userId);
                           }}
-                          className={`p-md hover:bg-amber-50 cursor-pointer transition-all flex justify-between items-center ${
+                          className={`p-md hover:bg-amber-50 cursor-pointer transition-all flex justify-between items-center font-sans ${
                             userId === item.userId ? 'bg-amber-100/70 font-bold border-l-4 border-amber-600' : ''
                           }`}
                         >
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-col gap-0.5 font-sans">
+                            <div className="flex items-center gap-2 font-sans">
                               {item.contractNo !== '-' && (
-                                <span className="bg-amber-700 text-white font-mono text-xs px-2 py-0.5 rounded font-bold">
+                                <span className="bg-amber-700 text-white font-sans text-xs px-2 py-0.5 rounded font-bold">
                                   {item.contractNo}
                                 </span>
                               )}
-                              <span className="text-sm font-bold text-gray-900">
+                              <span className="text-sm font-bold text-gray-900 font-sans">
                                 {item.customerName}
                               </span>
                             </div>
-                            <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                            <div className="text-[11px] text-gray-500 flex items-center gap-2 font-sans">
                               {item.totalLoan && (
-                                <span>วงเงิน: <strong>{item.totalLoan.toLocaleString()} ฿</strong></span>
+                                <span className="font-sans">วงเงิน: <strong>{item.totalLoan.toLocaleString()} ฿</strong></span>
                               )}
-                              <span className="font-mono text-[10px] text-gray-400">ID: {item.userId.substring(0, 10)}...</span>
+                              <span className="font-sans text-[10px] text-gray-400">ID: {item.userId.substring(0, 10)}...</span>
                             </div>
                           </div>
 
-                          <div className="flex flex-col items-end gap-1">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          <div className="flex flex-col items-end gap-1 font-sans">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-sans ${
                               item.status === 'ผ่อนชำระ'
                                 ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                 : item.status === 'ปิดบัญชีแล้ว'
@@ -502,7 +499,7 @@ function Home() {
                               {item.status}
                             </span>
                             {userId === item.userId && (
-                              <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
+                              <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5 font-sans">
                                 <span className="material-symbols-outlined text-[12px]">visibility</span> เลือกอยู่
                               </span>
                             )}
@@ -518,11 +515,11 @@ function Home() {
             {/* Currently Active Impersonation Indicator */}
             {userId !== realUserId && (
               <div className="bg-black/25 p-sm rounded-lg text-xs text-amber-100 flex items-center justify-between border border-amber-300/30 font-sans">
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 font-sans">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  กำลังสวมบทบาทดูลูกค้า: <strong className="text-white font-bold">{customerDisplayName || impersonatedCustomer?.name || userId}</strong>
+                  online: <strong className="text-white font-bold">{customerDisplayName || impersonatedCustomer?.name || userId}</strong>
                 </span>
-                <span className="bg-amber-900/60 px-2 py-0.5 rounded text-[10px] font-mono text-amber-200">
+                <span className="bg-amber-900/60 px-2 py-0.5 rounded text-[10px] font-sans text-amber-200">
                   ID: {userId.substring(0, 12)}...
                 </span>
               </div>
@@ -538,7 +535,7 @@ function Home() {
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSI9X2y3G_rYFiwEaSEpfrgJ4Wdv5hNSZWaR17I0Odqx1sHuJbCbfajReV-nlNipyB3VBESwwfM5SK35-wMcf4Y3JctJv-E-zvDiyfFo6j9lF9klnWW8g_d0xv1C5UsUo1O-gjfVqHkZMu_qx53sQ5ILmqiwGbyclfR9vsuSSlwznhCvqhFwqOox9bHRBnNbW4w7mmnTFNOT2KVCuU7gnn0NWg_VNuYyTMqMgnuaT1Y_CkROLvXtI46CaDglXXL_b1yiLpWZNqfV8"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/40 to-transparent flex flex-col justify-end p-md">
-            <h2 className="text-[22px] font-bold text-secondary-fixed leading-tight drop-shadow-sm font-sans">บริษัท ทรัพย์สำราญ พีโก จำกัด</h2>
+            <h2 className="text-[22px] font-bold text-secondary-fixed leading-tight drop-shadow-sm font-sans">บริษัท ทรัพย์สำราญ พิโก จำกัด</h2>
             <p className="text-xs font-semibold text-white/90 tracking-wider font-sans uppercase">SUBSUMRAN PICO CO., LTD.</p>
           </div>
         </div>
@@ -597,6 +594,162 @@ function Home() {
             </button>
           </div>
         </div>
+
+        {/* Card 4: สินเชื่อ — Loading State / Empty State / Contracts */}
+        {dataContact === null || dataInterest === null ? (
+          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col items-center justify-center py-10 gap-sm">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary/20 border-t-primary mb-2"></div>
+            <p className="text-label-md font-bold text-primary font-sans">กำลังโหลดข้อมูลสินเชื่อ...</p>
+            <p className="text-xs text-on-surface-variant font-sans">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจากฐานข้อมูล</p>
+          </div>
+        ) : activeContacts.length === 0 ? (
+          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-primary/30 transition-all">
+            <div className="p-md flex flex-col gap-sm">
+              <div className="flex items-center gap-xs">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
+                </div>
+                <div>
+                  <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
+                  <h4 className="text-label-lg font-bold text-primary font-sans">ข้อมูลสัญญากู้ยืม</h4>
+                </div>
+              </div>
+              <p className="text-center text-on-surface-variant py-4 font-sans text-sm">ไม่พบข้อมูลสัญญาเงินกู้ในระบบ</p>
+            </div>
+          </div>
+        ) : (
+          activeContacts.map((c, idx) => {
+            const contractInstallments = dataInterest ? dataInterest.filter(inst => inst.Id_contact === c.ID_contact) : [];
+            const {
+              nextInstallment: nextInst,
+              nextFee,
+              nextPayTotal,
+              paidCount,
+              totalCount,
+              progressPercent
+            } = getContractProgression(c, contractInstallments);
+
+            return (
+              <div 
+                key={c.ID_contact}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleNavigateDetail(c.ID_contact)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleNavigateDetail(c.ID_contact);
+                  }
+                }}
+                aria-label={`ดูรายละเอียดสัญญาที่ ${idx + 1} เลขที่ ${c.ID_contact}`}
+                className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-secondary/60 hover:shadow-sm transition-all cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                <div className="p-md flex flex-col gap-sm">
+                  {/* Header row */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-xs">
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
+                      </div>
+                      <div>
+                        <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
+                        <h4 className="text-label-lg font-bold text-primary font-sans">สัญญาที่ {idx + 1}</h4>
+                      </div>
+                    </div>
+                    {nextInst ? (
+                      <span className="bg-error-container text-on-error-container px-sm py-0.5 rounded-full text-xs font-bold font-sans">รอชำระ</span>
+                    ) : (
+                      <span className="bg-green-100 text-green-700 px-sm py-0.5 rounded-full text-xs font-bold font-sans">ชำระครบแล้ว</span>
+                    )}
+                  </div>
+
+                  {/* Contract Info */}
+                  <div className="bg-primary/5 rounded-lg border border-primary/10 p-md flex flex-col gap-md">
+                    {/* Borrower Name Badge */}
+                    <div className="bg-amber-50 border border-amber-200/90 rounded-lg px-3 py-1.5 flex items-center justify-between shadow-xs">
+                      <div className="flex items-center gap-1.5 text-xs text-amber-950 font-bold font-sans">
+                        <span className="material-symbols-outlined text-[18px] text-amber-700">person</span>
+                        <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-md">
+                      <div>
+                        <p className="text-label-sm text-on-surface-variant font-sans">เลขที่สัญญา</p>
+                        <p className="text-body-md font-bold text-primary font-mono mt-xs">{c.ID_contact}</p>
+                      </div>
+                      <div>
+                        <p className="text-label-sm text-on-surface-variant font-sans">กำหนดชำระ</p>
+                        {nextInst ? (
+                          <p className="text-body-md font-bold text-primary mt-xs font-sans">
+                            {formatThaiDate(nextInst.begin_date)}
+                          </p>
+                        ) : (
+                          <p className="text-body-md font-bold text-green-700 mt-xs font-sans">ชำระเงินครบถ้วน</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progression Section */}
+                    <div className="border-t border-primary/10 pt-sm flex flex-col gap-xs">
+                      <div className="flex justify-between items-center text-xs font-sans">
+                        <span className="text-on-surface-variant font-medium">ความคืบหน้าการผ่อนชำระ</span>
+                        <span className="font-bold text-primary">
+                          {totalCount > 0
+                            ? `ชำระไป ${paidCount} งวดจาก ${totalCount} งวด (${progressPercent}%)`
+                            : `ชำระไป ${paidCount} งวด`}
+                        </span>
+                      </div>
+                      {totalCount > 0 && (
+                        <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-primary h-full rounded-full transition-all duration-500 ease-out" 
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="border-t border-primary/10 pt-sm flex items-center justify-between">
+                      {nextInst ? (
+                        <div>
+                          <p className="text-label-sm text-on-surface-variant font-sans">ยอดที่ต้องชำระครั้งถัดไป</p>
+                          <p className="text-headline-sm font-bold text-primary leading-none mt-xs">
+                            {nextPayTotal.toLocaleString()}
+                            <span className="text-body-md font-normal ml-1">฿</span>
+                          </p>
+                          {nextFee > 0 && (
+                            <p className="text-[11px] font-bold text-red-600 mt-1 font-sans">
+                              (รวมค่าปรับ {nextFee.toLocaleString()} ฿)
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-label-sm text-on-surface-variant font-sans">สถานะสัญญา</p>
+                          <p className="text-body-md font-bold text-green-700 mt-xs font-sans">ชำระเงินครบถ้วนแล้ว</p>
+                        </div>
+                      )}
+                      {navigatingContractId === c.ID_contact ? (
+                        <span className="text-xs font-bold text-white bg-primary/80 px-md py-2 rounded-lg flex items-center gap-1.5 font-sans shadow-sm">
+                          <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          กำลังโหลด...
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-white bg-primary hover:bg-primary-container px-md py-2 rounded-lg flex items-center gap-0.5 font-sans shadow-sm">
+                          ดูรายละเอียด <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
 
         {/* Card 3: สมัครรับการแจ้งเตือนทางไลน์ / ปุ่มเพิ่มสินเชื่อ */}
         {userContacts.length > 0 ? (
@@ -661,150 +814,6 @@ function Home() {
               </button>
             </div>
           </div>
-        )}
-
-        {/* Card 4: สินเชื่อ — Loading State / Empty State / Contracts */}
-        {dataContact === null || dataInterest === null ? (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col items-center justify-center py-10 gap-sm">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary/20 border-t-primary mb-2"></div>
-            <p className="text-label-md font-bold text-primary font-sans">กำลังโหลดข้อมูลสินเชื่อ...</p>
-            <p className="text-xs text-on-surface-variant font-sans">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจากฐานข้อมูล</p>
-          </div>
-        ) : activeContacts.length === 0 ? (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-primary/30 transition-all">
-            <div className="p-md flex flex-col gap-sm">
-              <div className="flex items-center gap-xs">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
-                </div>
-                <div>
-                  <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
-                  <h4 className="text-label-lg font-bold text-primary font-sans">ข้อมูลสัญญากู้ยืม</h4>
-                </div>
-              </div>
-              <p className="text-center text-on-surface-variant py-4 font-sans text-sm">ไม่พบข้อมูลสัญญาเงินกู้ในระบบ</p>
-            </div>
-          </div>
-        ) : (
-          activeContacts.map((c, idx) => {
-            const contractInstallments = dataInterest ? dataInterest.filter(inst => inst.Id_contact === c.ID_contact) : [];
-            const {
-              nextInstallment: nextInst,
-              nextFee,
-              nextPayTotal,
-              paidCount,
-              totalCount,
-              progressPercent
-            } = getContractProgression(c, contractInstallments);
-
-            return (
-              <div 
-                key={c.ID_contact}
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/LoanDetails?contractId=${encodeURIComponent(c.ID_contact)}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    router.push(`/LoanDetails?contractId=${encodeURIComponent(c.ID_contact)}`);
-                  }
-                }}
-                aria-label={`ดูรายละเอียดสัญญาที่ ${idx + 1} เลขที่ ${c.ID_contact}`}
-                className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-secondary/60 hover:shadow-sm transition-all cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              >
-                <div className="p-md flex flex-col gap-sm">
-                  {/* Header row */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-xs">
-                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
-                      </div>
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
-                        <h4 className="text-label-lg font-bold text-primary font-sans">สัญญาที่ {idx + 1}</h4>
-                      </div>
-                    </div>
-                    {nextInst ? (
-                      <span className="bg-error-container text-on-error-container px-sm py-0.5 rounded-full text-xs font-bold font-sans">รอชำระ</span>
-                    ) : (
-                      <span className="bg-green-100 text-green-700 px-sm py-0.5 rounded-full text-xs font-bold font-sans">ชำระครบแล้ว</span>
-                    )}
-                  </div>
-
-                  {/* Contract Info */}
-                  <div className="bg-primary/5 rounded-lg border border-primary/10 p-md flex flex-col gap-md">
-                    {/* Borrower Name Badge */}
-                    <div className="bg-amber-50 border border-amber-200/90 rounded-lg px-3 py-1.5 flex items-center justify-between shadow-xs">
-                      <div className="flex items-center gap-1.5 text-xs text-amber-950 font-bold font-sans">
-                        <span className="material-symbols-outlined text-[18px] text-amber-700">person</span>
-                        <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
-                      </div>
-                      <span className="text-[10px] text-amber-800 font-mono font-bold bg-amber-100/80 px-1.5 py-0.5 rounded">
-                        สัญญา {c.ID_contact}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-md">
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans">เลขที่สัญญา</p>
-                        <p className="text-body-md font-bold text-primary font-mono mt-xs">{c.ID_contact}</p>
-                      </div>
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans">กำหนดชำระ</p>
-                        {nextInst ? (
-                          <p className="text-body-md font-bold text-primary mt-xs font-sans">
-                            {formatThaiDate(nextInst.begin_date)}
-                          </p>
-                        ) : (
-                          <p className="text-body-md font-bold text-green-700 mt-xs font-sans">ชำระเงินครบถ้วน</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Progression Section */}
-                    <div className="border-t border-primary/10 pt-sm flex flex-col gap-xs">
-                      <div className="flex justify-between items-center text-xs font-sans">
-                        <span className="text-on-surface-variant font-medium">ความคืบหน้าการผ่อนชำระ</span>
-                        <span className="font-bold text-primary">
-                          {totalCount > 0
-                            ? `ชำระไป ${paidCount} งวดจาก ${totalCount} งวด (${progressPercent}%)`
-                            : `ชำระไป ${paidCount} งวด`}
-                        </span>
-                      </div>
-                      {totalCount > 0 && (
-                        <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-primary h-full rounded-full transition-all duration-500 ease-out" 
-                            style={{ width: `${progressPercent}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    
-                    {nextInst && (
-                      <div className="border-t border-primary/10 pt-sm flex items-center justify-between">
-                        <div>
-                          <p className="text-label-sm text-on-surface-variant font-sans">ยอดที่ต้องชำระครั้งถัดไป</p>
-                          <p className="text-headline-sm font-bold text-primary leading-none mt-xs">
-                            {nextPayTotal.toLocaleString()}
-                            <span className="text-body-md font-normal ml-1">฿</span>
-                          </p>
-                          {nextFee > 0 && (
-                            <p className="text-[11px] font-bold text-red-600 mt-1 font-sans">
-                              (รวมค่าปรับ {nextFee.toLocaleString()} ฿)
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-xs font-bold text-white bg-primary hover:bg-primary-container px-md py-2 rounded-lg flex items-center gap-0.5 font-sans shadow-sm">
-                          ดูรายละเอียด <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })
         )}
       </main>
 
@@ -1057,7 +1066,7 @@ function Home() {
                 <div className="flex flex-col gap-md">
                   <div className="bg-primary/5 rounded-lg border border-primary/10 overflow-hidden shadow-sm">
                     <img src={logo.src || logo} alt="Company Logo" className="w-28 mx-auto my-md drop-shadow" />
-                    <p className="text-center text-label-sm font-bold text-primary">บริษัท ทรัพย์สำราญ พีโก จำกัด</p>
+                    <p className="text-center text-label-sm font-bold text-primary">บริษัท ทรัพย์สำราญ พิโก จำกัด</p>
                     <p className="text-center text-[11px] text-on-surface-variant px-md pb-md">ใบอนุญาตประกอบธุรกิจสินเชื่อรายย่อยระดับจังหวัดภายใต้การกำกับ (Pico Finance)</p>
                   </div>
 

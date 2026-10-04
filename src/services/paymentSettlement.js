@@ -5,7 +5,7 @@ import {
   updateContactData,
   fetchLatestGlobalInvoices,
 } from './api';
-import { calculateOverdueFee } from '../utils/installmentProgression';
+import { calculateOverdueFee, parseAppDate } from '../utils/installmentProgression';
 
 /**
  * Payment Settlement Module
@@ -77,9 +77,11 @@ export const submitPaymentSettlement = async ({
   }
 
   // 1. Resolve earliest overdue installment for fee calculation
-  const earliestRow = selectedInstallments.reduce((prev, curr) =>
-    new Date(prev.begin_date) < new Date(curr.begin_date) ? prev : curr
-  );
+  const earliestRow = selectedInstallments.reduce((prev, curr) => {
+    const timePrev = parseAppDate(prev.begin_date)?.getTime() || 0;
+    const timeCurr = parseAppDate(curr.begin_date)?.getTime() || 0;
+    return timePrev < timeCurr ? prev : curr;
+  });
   const fee = earliestRow ? calculateOverdueFee(earliestRow.begin_date) : 0;
 
   // 2. Generate Next Invoice ID

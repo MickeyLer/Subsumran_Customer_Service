@@ -6,7 +6,7 @@ import { DataContext } from './DataContext';
 import { fetchContactById, fetchInterestByContact } from './services/api';
 import { ChevronLeft, Receipt, CheckCircle, Clock, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { DateTime } from 'luxon';
-import { getContractProgression } from './utils/installmentProgression';
+import { getContractProgression, formatThaiDate } from './utils/installmentProgression';
 
 function LoanDetails() {
   const searchParams = useSearchParams();
@@ -82,32 +82,12 @@ function LoanDetails() {
     progressPercent
   } = getContractProgression(contract, installments);
 
-  // Helper: Format Thai Date
-  const formatThaiDate = (dateStr) => {
-    if (!dateStr) return '';
-    const str = String(dateStr).trim();
-    const months = [
-      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-    ];
 
-    // If DD/MM/YYYY format e.g. "27/09/2026"
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
-      const parts = str.split('/');
-      const day = parseInt(parts[0], 10);
-      const mIdx = parseInt(parts[1], 10) - 1;
-      const yr = parseInt(parts[2], 10);
-      const displayYr = yr > 2400 ? yr : yr + 543;
-      return `${day} ${months[mIdx] || ''} ${displayYr}`;
-    }
 
-    const date = new Date(str);
-    if (isNaN(date.getTime())) return str;
-    const year = date.getFullYear() > 2400 ? date.getFullYear() : date.getFullYear() + 543;
-    return `${date.getDate()} ${months[date.getMonth()]} ${year}`;
-  };
+  const [isNavigatingPay, setIsNavigatingPay] = useState(false);
 
   const handlePay = () => {
+    setIsNavigatingPay(true);
     router.push(`/Pay?IDcontact=${encodeURIComponent(contractId)}`);
   };
 
@@ -116,7 +96,10 @@ function LoanDetails() {
       {/* Header App Bar */}
       <header className="fixed top-0 left-0 w-full h-16 bg-primary border-b-2 border-secondary-fixed shadow-md z-50 flex items-center px-margin-mobile gap-base">
         <button 
-          onClick={() => router.push('/')} 
+          onClick={() => {
+            if (typeof window !== 'undefined') window.scrollTo(0, 0);
+            router.push('/');
+          }} 
           className="text-secondary-fixed hover:scale-105 active:scale-95 transition-transform flex items-center w-11 h-11 justify-center rounded-full hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-fixed/50"
           aria-label="ย้อนกลับ"
         >
@@ -272,9 +255,26 @@ function LoanDetails() {
                 <div className="mt-sm">
                   <button 
                     onClick={handlePay}
-                    className="w-full bg-primary text-white hover:bg-primary-container text-body-md font-bold py-3.5 rounded-lg active:scale-95 transition-all shadow-md flex items-center justify-center gap-xs font-sans"
+                    disabled={isNavigatingPay}
+                    className={`w-full text-body-md font-bold py-3.5 rounded-lg transition-all shadow-md flex items-center justify-center gap-xs font-sans ${
+                      isNavigatingPay 
+                        ? 'bg-primary/70 text-white cursor-not-allowed' 
+                        : 'bg-primary text-white hover:bg-primary-container active:scale-95'
+                    }`}
                   >
-                    ชำระเงินตอนนี้ <span className="material-symbols-outlined text-[18px]">payments</span>
+                    {isNavigatingPay ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>กำลังไปหน้าชำระเงิน...</span>
+                      </>
+                    ) : (
+                      <>
+                        ชำระเงินตอนนี้ <span className="material-symbols-outlined text-[18px]">payments</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}

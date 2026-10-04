@@ -5,7 +5,7 @@
 product
 
 ## Users
-The primary users are loan and gold-saving customers of Subsumran Pico (บจก. ทรัพย์สำราญ พีโก) in Thailand, accessing the application as a LINE LIFF (LINE Front-end Framework) dashboard directly inside the LINE Messenger app. Their physical context is mobile-first, under varied ambient lighting, and often in a hurry. They need to quickly check upcoming loan payment details, copy bank accounts, upload receipts, review their active contracts, or check gold savings rates.
+The primary users are loan and gold-saving customers of Subsumran Pico (บจก. ทรัพย์สำราญ พิโก) in Thailand, accessing the application as a LINE LIFF (LINE Front-end Framework) dashboard directly inside the LINE Messenger app. Their physical context is mobile-first, under varied ambient lighting, and often in a hurry. They need to quickly check upcoming loan payment details, copy bank accounts, upload receipts, review their active contracts, or check gold savings rates.
 
 ## Product Purpose
 The application serves as a premium, highly tactile customer service portal that simplifies financial transactions (loan installment payments, gold savings management) and increases trust. Success looks like frictionless payment submission, reduced service inquiries to staff, and high confidence in transactions through clear confirmation states.

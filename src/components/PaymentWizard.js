@@ -6,7 +6,7 @@ import QRious from 'qrious';
 import Swal from 'sweetalert2';
 import { Camera, UploadCloud, CheckCircle, ChevronRight, X, Copy, QrCode, AlertTriangle, Check } from 'lucide-react';
 import { submitPaymentSettlement } from '../services/paymentSettlement';
-import { calculateOverdueFee } from '../utils/installmentProgression';
+import { calculateOverdueFee, parseAppDate } from '../utils/installmentProgression';
 
 /**
  * PaymentWizard — รองรับการชำระหลายงวดพร้อมกัน
@@ -44,9 +44,11 @@ const PaymentWizard = ({
 
   // Earliest overdue row — used for fee calculation
   const earliestRow = selectedInstallments.length > 0
-    ? selectedInstallments.reduce((prev, curr) =>
-        new Date(prev.begin_date) < new Date(curr.begin_date) ? prev : curr
-      )
+    ? selectedInstallments.reduce((prev, curr) => {
+        const timePrev = parseAppDate(prev.begin_date)?.getTime() || 0;
+        const timeCurr = parseAppDate(curr.begin_date)?.getTime() || 0;
+        return timePrev < timeCurr ? prev : curr;
+      })
     : null;
 
   useEffect(() => {
@@ -197,7 +199,7 @@ const PaymentWizard = ({
                   <div key={i} className="flex justify-between items-center px-4 py-3 border-b border-outline-variant/10 last:border-0">
                     <span className="text-sm font-sans text-on-surface">
                       งวด {inst.number_pay}
-                      {new Date(inst.begin_date) < new Date() && inst.status !== 1 && (
+                      {parseAppDate(inst.begin_date) && parseAppDate(inst.begin_date) < new Date() && inst.status !== 1 && String(inst.status) !== '1' && (
                         <span className="ml-2 text-red-600 text-xs font-bold">(ค้างชำระ)</span>
                       )}
                     </span>
@@ -256,7 +258,7 @@ const PaymentWizard = ({
                   </div>
                 )}
                 <div className="mt-4 text-center">
-                  <p className="text-sm text-on-surface-variant font-sans">บริษัท ทรัพย์สำราญ พีโก จำกัด</p>
+                  <p className="text-sm text-on-surface-variant font-sans">บริษัท ทรัพย์สำราญ พิโก จำกัด</p>
                   <p className="font-bold text-lg text-primary mt-1 font-sans">ยอดชำระ: {totalpay.toLocaleString()} บาท</p>
                 </div>
               </div>

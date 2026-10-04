@@ -9,7 +9,7 @@ import { fetchContactById, fetchInterestByContact } from './services/api';
 import { addMonths } from '@progress/kendo-date-math';
 import DateDiff from 'date-diff';
 import { ChevronLeft, CreditCard, AlertTriangle, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
-import { getContractProgression } from './utils/installmentProgression';
+import { getContractProgression, formatThaiDate, parseAppDate } from './utils/installmentProgression';
 
 function Pay() {
     const { dataContact, dataInterest, loadContractData } = useContext(DataContext) || {};
@@ -73,20 +73,13 @@ function Pay() {
 
     // Check if a row is overdue (past due date)
     const isOverdue = (row) => {
-      const date2 = DateTime.fromJSDate(new Date()).toFormat("yyyy-MM-dd");
-      const daydif = ((new DateDiff(new Date(date2), new Date(row.begin_date))).days().toFixed(0));
-      return daydif > 0;
-    };
-
-    // Helper: Format Thai Date
-    const formatThaiDate = (dateStr) => {
-      if (!dateStr) return '';
-      const date = new Date(dateStr);
-      const months = [
-        'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-        'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-      ];
-      return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
+      if (!row || !row.begin_date) return false;
+      const beginDate = parseAppDate(row.begin_date);
+      if (!beginDate) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(beginDate.getFullYear(), beginDate.getMonth(), beginDate.getDate());
+      return today > dueDate;
     };
 
     // Find next unpaid installment & fee using Installment Progression Module
@@ -162,9 +155,9 @@ function Pay() {
             </div>
           ) : nextInstallment ? (
             <div className="bg-white rounded-xl border border-outline-variant/50 overflow-hidden shadow-sm hover:border-primary/30 transition-all">
-              <div className="p-5 border-b border-outline-variant/20 flex justify-between items-center bg-slate-50/50">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <div className="p-5 border-b border-outline-variant/20 flex justify-between items-start bg-slate-50/50">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">
                     <CreditCard size={20} />
                   </div>
                   <div>
@@ -172,18 +165,23 @@ function Pay() {
                       งวดที่ {nextInstallment.number_pay}
                     </h3>
                     <p className="text-xs text-on-surface-variant font-sans mt-0.5">
-                      สัญญาเลขที่ {searchtxt} • คุณ{currentContact?.Name_loan || ''}
+                      สัญญาเลขที่ {searchtxt}
                     </p>
+                    {currentContact?.Name_loan && (
+                      <p className="text-xs text-on-surface-variant font-sans mt-0.5">
+                        {currentContact.Name_loan}
+                      </p>
+                    )}
                   </div>
                 </div>
                 
                 {/* Status Badge */}
                 {isOverdue(nextInstallment) ? (
-                  <span className="bg-red-50 text-red-700 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans animate-pulse">
+                  <span className="bg-red-50 text-red-700 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans animate-pulse shrink-0 whitespace-nowrap">
                     <AlertTriangle size={14} /> ค้างชำระ
                   </span>
                 ) : (
-                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans">
+                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans shrink-0 whitespace-nowrap">
                     <Clock size={14} /> รอชำระ
                   </span>
                 )}
