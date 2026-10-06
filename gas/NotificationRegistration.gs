@@ -131,8 +131,8 @@ function doGet(e) {
       );
     }
 
-    // 2. ดึงชื่อผู้กู้ในฐานข้อมูล (รองรับชื่อคอลัมน์ชื่อผู้กู้)
-    const dbName = dbContract.name || dbContract.customer_name || dbContract.borrower_name || dbContract.Name || 'ไม่ระบุชื่อในระบบ';
+    // 2. ดึงชื่อผู้กู้ในฐานข้อมูล (รองรับชื่อคอลัมน์ชื่อผู้กู้ เช่น Name_loan ใน Supabase)
+    const dbName = dbContract.Name_loan || dbContract.name || dbContract.customer_name || dbContract.borrower_name || dbContract.Name || 'ไม่ระบุชื่อในระบบ';
 
     // 3. ตรวจสอบเปรียบเทียบชื่อ (ยืดหยุ่นเช็คเฉพาะชื่อ)
     const nameMatch = compareNames(borrowerName, dbName);

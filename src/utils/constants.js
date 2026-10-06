@@ -1,20 +1,21 @@
+// Parse Google Gemini API keys from environment variables.
+// Supports single key or comma-separated multiple keys (e.g. "key1,key2").
+const getGeminiApiKeys = () => {
+  const envKeys =
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEYS ||
+    process.env.REACT_APP_GEMINI_API_KEY ||
+    process.env.REACT_APP_GEMINI_API_KEYS ||
+    process.env.GEMINI_API_KEY ||
+    '';
 
-// Constants extracted from goldsaving.js
-export const GOLD_BAHT_WEIGHT = 15.244;
-export const BUY_GOLD_FEE_RATE = 0.01;
-export const SELL_GOLD_FEE_RATE = 0.01;
-export const METAL_PRICE_API_KEY = '225d4e55c96e8ec4200630dac2226de1';
+  if (!envKeys) return [];
 
-// Provide your key here or via environment variable
-export const ANTHROPIC_API_KEY = 'sk-ant-api03-...';
+  return envKeys
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean);
+};
 
-export const GEMINI_API_KEYS = [
-    'AIzaSyDNXDVW82LXzmYP5TjOw6U5bqebPv1XR6E',  // lerpongKKH
-    'AIzaSyDZpwXNZI2k5FP3Ym7RU4KSwkIFaoLmISM',  // lerpongKKH
-    'AIzaSyAeUtg_Mz6Xrotzrac8IjrwCGMniJrSY-A',  // lerpongKKH
-    'AIzaSyB5nC2KGSFQx-Jzl9UynvyrmV-egjwQgkU',  // sathaporn
-    'AIzaSyDOWlhMv4CcuxbnBL3O8cX_QfJYMrLrg5w',  // sathaporn
-    'AIzaSyA2tPLxrgFKKyEddHdfaJxvD4dYswDwLIA',  // sathaporn
-    'AIzaSyC2hq5EmxHgsDiGuybZLO211cUxGUXcIzw',  // lerpong1989
-    'AIzaSyDDJmNAEMtm7X50p6LM-UCMS39f34o19Lw',  // lerpong1989
-];
+export const GEMINI_API_KEYS = getGeminiApiKeys();
+export const GEMINI_API_KEY = GEMINI_API_KEYS[0] || '';

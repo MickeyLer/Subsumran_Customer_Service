@@ -23,13 +23,13 @@ const firebaseConfig = {
 
 // test firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDOXxQxdQSWDwq4Fu9C6170dn-onf7btSM",
-  authDomain: "aomtest-5740e.firebaseapp.com",
-  projectId: "aomtest-5740e",
-  storageBucket: "aomtest-5740e.firebasestorage.app",
-  messagingSenderId: "98821429167",
-  appId: "1:98821429167:web:3ddf1f4100cb766a90c15a",
-  measurementId: "G-3BTB89XX59"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyDOXxQxdQSWDwq4Fu9C6170dn-onf7btSM",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "aomtest-5740e.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "aomtest-5740e",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "aomtest-5740e.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "98821429167",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:98821429167:web:3ddf1f4100cb766a90c15a",
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-3BTB89XX59"
 };
 
 
