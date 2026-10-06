@@ -5,7 +5,7 @@ import {
   updateContactData,
   fetchLatestGlobalInvoices,
 } from './api';
-import { calculateOverdueFee, parseAppDate } from '../utils/installmentProgression';
+import { calculateOverdueFee, calculateOverdueFeeDetails, parseAppDate } from '../utils/installmentProgression';
 
 /**
  * Payment Settlement Module
@@ -76,13 +76,15 @@ export const submitPaymentSettlement = async ({
     throw new Error('ไม่พบงวดที่เลือกสำหรับการชำระเงิน');
   }
 
-  // 1. Resolve earliest overdue installment for fee calculation
-  const earliestRow = selectedInstallments.reduce((prev, curr) => {
-    const timePrev = parseAppDate(prev.begin_date)?.getTime() || 0;
-    const timeCurr = parseAppDate(curr.begin_date)?.getTime() || 0;
-    return timePrev < timeCurr ? prev : curr;
+  // 1. Resolve fee2 (late interest) and fee3 (collection fee) across selected installments
+  let totalLateInterest = 0;
+  let totalCollectionFee = 0;
+
+  selectedInstallments.forEach((inst) => {
+    const details = calculateOverdueFeeDetails(inst, contract, settings);
+    totalLateInterest += details.lateInterest;
+    totalCollectionFee += details.collectionFee;
   });
-  const fee = earliestRow ? calculateOverdueFee(earliestRow.begin_date) : 0;
 
   // 2. Generate Next Invoice ID
   const invoiceID = await generateNextInvoiceID();
@@ -117,8 +119,8 @@ export const submitPaymentSettlement = async ({
     tree: String(totalTree),
     interest: totalInterest,
     fee1: 0,
-    fee2: fee,
-    fee3: 0,
+    fee2: totalLateInterest, // ค่าปรับล่าช้า (Late interest)
+    fee3: totalCollectionFee, // ค่าทวงถาม (Collection fee)
     payroute: 'เงินโอน',
     accu: '0',
     status: 'pending',
@@ -130,12 +132,14 @@ export const submitPaymentSettlement = async ({
   let runningRest = rest;
   for (const inst of sortedInstallments) {
     runningRest -= Number(inst.tree);
+    const instDetails = calculateOverdueFeeDetails(inst, contract, settings);
     await updateInterestChart(inst.ID, {
       pay_date: paymentDateStr,
       reference: invoiceID,
       paytree: String(inst.tree),
       payinter: String(inst.interest),
-      payfee2: String(fee > 0 && inst.ID === earliestRow?.ID ? fee : 0),
+      payfee2: String(instDetails.lateInterest),
+      payfee3: String(instDetails.collectionFee),
       Rest: String(runningRest),
       payroute: 'เงินโอน',
       pdf_link: slipUrl,

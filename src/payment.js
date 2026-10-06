@@ -87,7 +87,7 @@ function Pay() {
       ? directInstallments
       : search(dataInterest || []);
 
-    const { nextInstallment, nextFee: calculatedFee } = getContractProgression(
+    const { nextInstallment, nextFee: calculatedFee, nextFeeDetails } = getContractProgression(
       currentContact,
       installments
     );
@@ -141,6 +141,7 @@ function Pay() {
             Name={currentContact.Name_loan}
             idContact={searchtxt}
             accumulate={currentContact.accumulate}
+            contract={currentContact}
           />
         )}
 
@@ -228,18 +229,33 @@ function Pay() {
                     </span>
                   </div>
 
-                  {/* Late fee / Fine */}
+                  {/* Late fee / Fine (fee2) */}
                   <div className="flex justify-between py-3.5 items-center">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${calculatedFee > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
-                      <span className={`${calculatedFee > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
+                      <div className={`w-2.5 h-2.5 rounded-full ${nextFeeDetails?.lateInterest > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
+                      <span className={`${nextFeeDetails?.lateInterest > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
                         ค่าปรับล่าช้า (Late Fee)
                       </span>
                     </div>
-                    <span className={`font-bold text-base ${calculatedFee > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                      {calculatedFee > 0 ? `${calculatedFee.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
+                    <span className={`font-bold text-base ${nextFeeDetails?.lateInterest > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                      {nextFeeDetails?.lateInterest > 0 ? `${nextFeeDetails.lateInterest.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
                     </span>
                   </div>
+
+                  {/* Collection Fee (fee3) */}
+                  {nextFeeDetails?.collectionFee > 0 && (
+                    <div className="flex justify-between py-3.5 items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                        <span className="text-amber-600 font-bold">
+                          ค่าทวงถาม (Collection Fee)
+                        </span>
+                      </div>
+                      <span className="font-bold text-base text-amber-600">
+                        {nextFeeDetails.collectionFee.toLocaleString()} ฿
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Total amount container */}
@@ -249,7 +265,7 @@ function Pay() {
                       ยอดรวมที่ต้องชำระงวดนี้
                     </p>
                     <p className="text-xs text-white/70 font-sans mt-0.5">
-                      (เงินต้น + ดอกเบี้ย + ค่าปรับ)
+                      (เงินต้น + ดอกเบี้ย + ค่าปรับ + ค่าทวงถาม)
                     </p>
                   </div>
                   <div className="text-right">

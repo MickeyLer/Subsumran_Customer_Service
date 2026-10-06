@@ -6,7 +6,7 @@ import QRious from 'qrious';
 import Swal from 'sweetalert2';
 import { Camera, UploadCloud, CheckCircle, ChevronRight, X, Copy, QrCode, AlertTriangle, Check } from 'lucide-react';
 import { submitPaymentSettlement } from '../services/paymentSettlement';
-import { calculateOverdueFee, parseAppDate } from '../utils/installmentProgression';
+import { calculateOverdueFeeDetails, parseAppDate } from '../utils/installmentProgression';
 
 /**
  * PaymentWizard — รองรับการชำระหลายงวดพร้อมกัน
@@ -18,6 +18,8 @@ import { calculateOverdueFee, parseAppDate } from '../utils/installmentProgressi
  *  - Name: string
  *  - idContact: string
  *  - accumulate: any
+ *  - contract: object
+ *  - settings: object
  *  - setOpenModal: (bool) => void
  */
 const PaymentWizard = ({
@@ -29,6 +31,8 @@ const PaymentWizard = ({
   Name = '',
   idContact = '',
   accumulate,
+  contract = {},
+  settings = {},
 }) => {
   const onClose = () => setOpenModal(false);
   const onComplete = () => window.location.reload();
@@ -39,24 +43,24 @@ const PaymentWizard = ({
   const [slipPreview, setSlipPreview] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-  const [feedisapp, setFeedisapp] = useState(0);
+  const [lateInterest, setLateInterest] = useState(0);
+  const [collectionFee, setCollectionFee] = useState(0);
   const [totalpay, setTotalpay] = useState(0);
 
-  // Earliest overdue row — used for fee calculation
-  const earliestRow = selectedInstallments.length > 0
-    ? selectedInstallments.reduce((prev, curr) => {
-        const timePrev = parseAppDate(prev.begin_date)?.getTime() || 0;
-        const timeCurr = parseAppDate(curr.begin_date)?.getTime() || 0;
-        return timePrev < timeCurr ? prev : curr;
-      })
-    : null;
-
   useEffect(() => {
-    // Calculate late fee from the earliest overdue installment
-    const calculatedFee = earliestRow ? calculateOverdueFee(earliestRow.begin_date) : 0;
-    setFeedisapp(calculatedFee);
+    let sumLate = 0;
+    let sumColl = 0;
 
-    const calculatedTotal = totalTree + totalInterest + calculatedFee;
+    (selectedInstallments || []).forEach((inst) => {
+      const details = calculateOverdueFeeDetails(inst, contract, settings);
+      sumLate += details.lateInterest;
+      sumColl += details.collectionFee;
+    });
+
+    setLateInterest(sumLate);
+    setCollectionFee(sumColl);
+
+    const calculatedTotal = totalTree + totalInterest + sumLate + sumColl;
     setTotalpay(calculatedTotal);
 
     if (calculatedTotal > 0) {
@@ -68,7 +72,7 @@ const PaymentWizard = ({
         console.error("QR Generation error", err);
       }
     }
-  }, [totalTree, totalInterest, earliestRow]);
+  }, [totalTree, totalInterest, selectedInstallments, contract, settings]);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -220,12 +224,20 @@ const PaymentWizard = ({
                   <span className="text-on-surface-variant font-sans">ดอกเบี้ยรวม</span>
                   <span className="font-semibold text-primary font-sans">{totalInterest.toLocaleString()} ฿</span>
                 </div>
-                {feedisapp > 0 && (
+                {lateInterest > 0 && (
                   <div className="flex justify-between p-4 border-b border-outline-variant/10 text-red-600 font-sans">
                     <span className="flex items-center gap-1">
                       <AlertTriangle size={14} /> ค่าปรับล่าช้า
                     </span>
-                    <span className="font-semibold">{feedisapp.toLocaleString()} ฿</span>
+                    <span className="font-semibold">{lateInterest.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {collectionFee > 0 && (
+                  <div className="flex justify-between p-4 border-b border-outline-variant/10 text-amber-600 font-sans">
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle size={14} /> ค่าทวงถาม
+                    </span>
+                    <span className="font-semibold">{collectionFee.toLocaleString()} ฿</span>
                   </div>
                 )}
                 <div className="flex justify-between p-5 bg-slate-50/80">
