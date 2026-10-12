@@ -751,6 +751,8 @@ function ReviewSlipContent() {
             />
           </div>
         </div>
+      )}
+
       {/* Offscreen Standard A4 Receipt for html2canvas */}
       <div 
         style={{ 
