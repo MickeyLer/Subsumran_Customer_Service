@@ -7,7 +7,11 @@ import { DataContext } from './DataContext';
 import Swal from 'sweetalert2';
 import logo from './Logo.png';
 import RichMenuGrid from './components/RichMenuGrid';
+import RewardsPortal from './components/RewardsPortal';
+import supabase from './supabaseClient';
+import { calculateTierInfo } from './utils/tierConfig';
 import { getContractProgression, getOverallProgression, formatThaiDate } from './utils/installmentProgression';
+import { getCollateralTypeInfo } from './utils/collateralType';
 
 function Home() {
   const router = useRouter();
@@ -23,6 +27,31 @@ function Home() {
     isAuthLoading
   } = useContext(AuthContext);
   const { dataContact, dataCustomer, dataInterest, refreshUserData, ensureAdminDataLoaded } = useContext(DataContext) || {};
+
+  // Loyalty & Points State (Synced with Supabase line_users)
+  const [userPoints, setUserPoints] = useState(380);
+
+  useEffect(() => {
+    if (!userId) return;
+    const fetchLoyaltyPoints = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('line_users')
+          .select('total_points, tier_level')
+          .eq('line_user_id', userId)
+          .maybeSingle();
+
+        if (data && data.total_points !== undefined && data.total_points !== null) {
+          setUserPoints(Number(data.total_points));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch user points from Supabase:', err);
+      }
+    };
+    fetchLoyaltyPoints();
+  }, [userId]);
+
+  const tierInfo = useMemo(() => calculateTierInfo(userPoints), [userPoints]);
 
   useEffect(() => {
     if (userId && refreshUserData) {
@@ -329,43 +358,49 @@ function Home() {
   };
 
   return (
-    <div className="bg-surface font-sans text-on-background flex flex-col items-center min-h-screen pb-24 selection:bg-secondary-fixed selection:text-primary">
+    <div className="bg-[#f8f9fa] font-sans text-slate-800 flex flex-col items-center min-h-screen pb-24 selection:bg-rose-100 selection:text-primary">
       {/* Top App Bar */}
-      <header className="fixed top-0 left-0 w-full h-16 bg-primary border-b-2 border-secondary-fixed shadow-md z-50 flex justify-between items-center px-margin-mobile">
-        <div className="flex items-center gap-base">
+      <header className="fixed top-0 left-0 w-full h-16 bg-gradient-to-r from-primary via-[#d83a78] to-[#ba2660] border-b border-amber-200/30 shadow-sm z-50 flex justify-between items-center px-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border-2 border-white/80 shadow-xs overflow-hidden shrink-0">
+            <img src={logo.src || logo} alt="Logo" className="w-full h-full object-cover scale-110" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-white leading-tight tracking-tight font-sans">ทรัพย์สำราญ พิโก</h1>
+            <p className="text-[10px] text-amber-200 font-semibold tracking-wider font-sans uppercase">PICO FINANCE</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
           <button 
             onClick={() => openModal('services')} 
-            className="text-secondary-fixed hover:scale-105 active:scale-95 transition-transform flex items-center w-11 h-11 justify-center rounded-full hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-fixed/50"
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95 cursor-pointer"
             aria-label="บริการและคำนวณสินเชื่อ"
           >
-            <span className="material-symbols-outlined text-[28px]">widgets</span>
+            <span className="material-symbols-outlined text-[22px]">widgets</span>
           </button>
-          <h1 className="text-headline-sm font-bold text-secondary-fixed leading-none tracking-tight">ทรัพย์สำราญ พิโก</h1>
-        </div>
-        <div className="flex items-center gap-sm">
           <button 
             onClick={() => openModal('contact')} 
-            className="text-secondary-fixed hover:scale-105 active:scale-95 transition-transform flex items-center w-11 h-11 justify-center rounded-full hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-fixed/50"
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95 cursor-pointer"
             aria-label="ติดต่อเจ้าหน้าที่"
           >
-            <span className="material-symbols-outlined">support_agent</span>
+            <span className="material-symbols-outlined text-[22px]">support_agent</span>
           </button>
           <button 
             onClick={() => openModal('profile')} 
-            className="w-11 h-11 rounded-full bg-secondary-fixed flex items-center justify-center overflow-hidden border-2 border-secondary-fixed hover:scale-105 active:scale-95 transition-transform cursor-pointer shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-fixed/50 p-0"
+            className="w-10 h-10 rounded-full bg-white/15 overflow-hidden border-2 border-amber-300/60 hover:scale-105 active:scale-95 transition-transform cursor-pointer shadow-xs p-0 flex items-center justify-center"
             aria-label="ข้อมูลโปรไฟล์ผู้ใช้"
           >
             {pictureUrl ? (
               <img src={pictureUrl} alt="LINE Profile" className="w-full h-full object-cover" />
             ) : (
-              <span className="material-symbols-outlined text-primary text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
+              <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
             )}
           </button>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="mt-16 w-full max-w-[600px] px-gutter py-md flex-grow flex flex-col gap-lg">
+      <main className="mt-16 w-full max-w-[600px] px-4 py-4 flex-grow flex flex-col gap-4">
         
         {/* ADMIN CUSTOMER SWITCHER TOOLBAR WITH AUTOCOMPLETE */}
         {isAdmin && (
@@ -527,95 +562,215 @@ function Home() {
           </div>
         )}
 
-        {/* Card 1: Brand Banner */}
-        <div className="relative w-full h-44 rounded-2xl overflow-hidden shadow-lg border-2 border-secondary-fixed group">
-          <img 
-            alt="Brand Header" 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSI9X2y3G_rYFiwEaSEpfrgJ4Wdv5hNSZWaR17I0Odqx1sHuJbCbfajReV-nlNipyB3VBESwwfM5SK35-wMcf4Y3JctJv-E-zvDiyfFo6j9lF9klnWW8g_d0xv1C5UsUo1O-gjfVqHkZMu_qx53sQ5ILmqiwGbyclfR9vsuSSlwznhCvqhFwqOox9bHRBnNbW4w7mmnTFNOT2KVCuU7gnn0NWg_VNuYyTMqMgnuaT1Y_CkROLvXtI46CaDglXXL_b1yiLpWZNqfV8"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/95 via-primary/40 to-transparent flex flex-col justify-end p-md">
-            <h2 className="text-[22px] font-bold text-secondary-fixed leading-tight drop-shadow-sm font-sans">บริษัท ทรัพย์สำราญ พิโก จำกัด</h2>
-            <p className="text-xs font-semibold text-white/90 tracking-wider font-sans uppercase">SUBSUMRAN PICO CO., LTD.</p>
+        {/* Customer Profile & Overview Card (Clean, Spacious, No duplicate avatar) */}
+        <div 
+          onClick={() => openModal('profile')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openModal('profile');
+            }
+          }}
+          className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs hover:shadow-sm hover:border-primary/40 transition-all cursor-pointer font-sans relative overflow-hidden group"
+        >
+          <div className="flex items-stretch justify-between gap-3">
+            {/* Left: Customer Info */}
+            <div className="min-w-0 flex-1 flex flex-col justify-between">
+              <div>
+                <p className="text-xs font-medium text-slate-400 font-sans">ยินดีต้อนรับ</p>
+                {isAuthLoading || (!customerDisplayName && (dataContact === null || dataCustomer === null)) ? (
+                  <div className="flex items-center gap-2 py-0.5 my-0.5">
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-primary/20 border-t-primary shrink-0"></div>
+                    <span className="text-xs text-slate-400 font-sans font-medium animate-pulse">กำลังโหลดข้อมูล...</span>
+                  </div>
+                ) : (
+                  <h2 className="text-[19px] font-extrabold text-slate-900 leading-tight truncate mt-0.5">
+                    {customerDisplayName || 'คุณลูกค้า'}
+                  </h2>
+                )}
+              </div>
+
+              {/* Contract info */}
+              <div className="flex items-center text-xs text-slate-500 mt-2.5">
+                <span className="flex items-center gap-1 font-medium whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[15px] text-primary">description</span>
+                  {dataContact === null
+                    ? 'กำลังดึงข้อมูลสัญญา...'
+                    : activeContacts.length > 0
+                    ? `สัญญาผ่อนชำระ ${activeContacts.length} ฉบับ`
+                    : 'ยังไม่มีสัญญาเปิดบริการ'}
+                </span>
+              </div>
+            </div>
+
+            {/* Right: Tier Badge (Top-Right) & Action (Bottom-Right) */}
+            <div className="shrink-0 flex flex-col items-end justify-between">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs whitespace-nowrap ${tierInfo.badgeBg}`}>
+                <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  {tierInfo.materialIcon}
+                </span>
+                <span>{tierInfo.name}</span>
+              </span>
+
+              <div className="flex items-center gap-0.5 text-xs font-semibold text-slate-500 group-hover:text-primary bg-slate-50 group-hover:bg-primary/10 px-2.5 py-1 rounded-xl border border-slate-200/80 transition-all shadow-2xs mt-2">
+                <span>ข้อมูล</span>
+                <span className="material-symbols-outlined text-[14px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Card 2: Welcome / Customer Greeting with LINE Profile */}
-        <div className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-primary/30 transition-all">
-          <div className="p-md flex items-center gap-md">
-            {/* LINE Profile Picture */}
-            <div className="relative shrink-0">
-              <div className="w-20 h-20 rounded-full bg-secondary-fixed overflow-hidden border-4 border-primary shadow-lg">
-                {pictureUrl ? (
-                  <img src={pictureUrl} alt="LINE Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-primary">
-                    <span className="material-symbols-outlined text-secondary-fixed text-[40px]" style={{ fontVariationSettings: "'FILL' 1" }}>account_circle</span>
-                  </div>
-                )}
+        {/* Compact Quick Actions Strip */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-2 shadow-2xs grid grid-cols-4 gap-1 w-full">
+          <button
+            onClick={handleInstallmentClick}
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-slate-50 active:scale-95 transition-all group cursor-pointer"
+            aria-label="ชำระค่างวด"
+          >
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-primary flex items-center justify-center mb-1 group-hover:bg-primary group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined text-[20px]">payments</span>
+            </div>
+            <span className="text-[11px] font-medium text-slate-700 font-sans">ชำระค่างวด</span>
+          </button>
+
+          <button
+            onClick={() => openModal('bank')}
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-slate-50 active:scale-95 transition-all group cursor-pointer"
+            aria-label="เลขที่บัญชี"
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mb-1 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined text-[20px]">account_balance</span>
+            </div>
+            <span className="text-[11px] font-medium text-slate-700 font-sans">เลขบัญชี</span>
+          </button>
+
+          <button
+            onClick={() => openModal('services')}
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-slate-50 active:scale-95 transition-all group cursor-pointer"
+            aria-label="คำนวณสินเชื่อ"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-1 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined text-[20px]">calculate</span>
+            </div>
+            <span className="text-[11px] font-medium text-slate-700 font-sans">คำนวณเงิน</span>
+          </button>
+
+          <button
+            onClick={() => openModal('contact')}
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl hover:bg-slate-50 active:scale-95 transition-all group cursor-pointer"
+            aria-label="ติดต่อเจ้าหน้าที่"
+          >
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <span className="material-symbols-outlined text-[20px]">support_agent</span>
+            </div>
+            <span className="text-[11px] font-medium text-slate-700 font-sans">ติดต่อเรา</span>
+          </button>
+        </div>
+
+        {/* Loyalty & Rewards Progression Card (Clean & Motivating) */}
+        <div 
+          onClick={() => openModal('rewards')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openModal('rewards');
+            }
+          }}
+          className="w-full bg-white rounded-2xl p-4 shadow-xs hover:shadow-md border border-slate-200/90 hover:border-amber-400/60 transition-all flex flex-col gap-3 font-sans relative overflow-hidden group cursor-pointer"
+        >
+          {/* Subtle warm accent glow on top right */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-amber-100/40 via-yellow-50/20 to-transparent rounded-bl-full pointer-events-none" />
+
+          {/* Top Row: Title & Total Points */}
+          <div className="flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <span className="material-symbols-outlined text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
               </div>
-              {/* LINE badge */}
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#06C755] flex items-center justify-center shadow border-2 border-white">
-                <svg viewBox="0 0 24 24" fill="white" className="w-3.5 h-3.5">
-                  <path d="M12 2C6.48 2 2 6.03 2 11c0 3.24 1.79 6.09 4.54 7.83-.1.37-.39 1.37-.45 1.59-.07.27.1.27.21.2.09-.06 1.42-.94 1.99-1.32.54.08 1.09.12 1.65.12 5.52 0 10-4.03 10-9 0-4.97-4.48-9-10-9z"/>
-                </svg>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 leading-tight">ระบบสะสมคะแนนลูกค้า</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">รับแต้มเพิ่มทุกครั้งที่ชำระตรงเวลา</p>
               </div>
             </div>
 
-            {/* Greeting Text */}
-            <div className="flex-grow min-w-0">
-              <p className="text-label-sm font-semibold text-on-surface-variant font-sans">ยินดีต้อนรับ</p>
-              {isAuthLoading || (!customerDisplayName && (dataContact === null || dataCustomer === null)) ? (
-                <div className="flex items-center gap-2 py-1 my-0.5">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary/20 border-t-primary shrink-0"></div>
-                  <span className="text-xs text-on-surface-variant font-sans font-medium animate-pulse">กำลังโหลดข้อมูลลูกค้า...</span>
-                </div>
-              ) : (
-                <h3 className="text-[20px] font-bold text-primary leading-snug truncate font-sans">
-                  {customerDisplayName || 'คุณลูกค้า'}
-                </h3>
-              )}
-              <p className="text-label-sm text-on-surface-variant font-sans mt-xs">
-                {dataContact === null
-                  ? 'กำลังดึงข้อมูลสัญญา...'
-                  : activeContacts.length > 0
-                  ? `มีสัญญาใช้งาน ${activeContacts.length} ฉบับ`
-                  : 'ยังไม่มีสัญญาที่เปิดบริการ'}
+            <div className="text-right">
+              <p className="text-[11px] font-semibold text-slate-400">คะแนนสะสม</p>
+              <p className="text-xl font-black text-amber-600 leading-tight">
+                {userPoints.toLocaleString()} <span className="text-xs font-semibold text-slate-600">แต้ม</span>
               </p>
             </div>
+          </div>
 
-            <button 
-              onClick={() => openModal('profile')}
-              className="shrink-0 bg-primary text-white text-[11px] font-bold px-sm py-1.5 rounded-lg hover:bg-primary-container hover:text-secondary-fixed active:scale-95 transition-all shadow-sm flex flex-col items-center gap-0.5 font-sans"
-              aria-label="ดูข้อมูลโปรไฟล์"
-            >
-              <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
-              <span>ข้อมูล</span>
-            </button>
+          {/* Middle: Gamified Progression Bar */}
+          <div className="bg-slate-50/90 rounded-xl p-3 border border-slate-200/70 flex flex-col gap-1.5 relative z-10">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-bold text-slate-700 flex items-center gap-1">
+                <span>{tierInfo.nextTierIcon || '💎'} เป้าหมาย:</span>
+                <span className="text-amber-800">{tierInfo.nextTierName || 'ระดับสูงสุด (Platinum)'}</span>
+              </span>
+              <span className="font-extrabold text-amber-700 font-mono text-[11px]">
+                {tierInfo.nextMinPoints
+                  ? `${userPoints.toLocaleString()} / ${tierInfo.nextMinPoints.toLocaleString()} แต้ม (${tierInfo.progress}%)`
+                  : `${userPoints.toLocaleString()} แต้ม (100%)`}
+              </span>
+            </div>
+
+            {/* Progression Bar Track */}
+            <div className="w-full bg-slate-200/80 h-2.5 rounded-full overflow-hidden p-[1px]">
+              <div 
+                className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 h-full rounded-full transition-all duration-700 ease-out shadow-xs" 
+                style={{ width: `${tierInfo.progress}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-[11px] pt-0.5">
+              <span className="text-slate-500 font-medium flex items-center gap-1">
+                {tierInfo.pointsNeeded > 0 ? (
+                  <span>✨ อีก {tierInfo.pointsNeeded.toLocaleString()} แต้ม ปลดล็อก {tierInfo.nextTierName}</span>
+                ) : (
+                  <span>👑 คุณอยู่ระดับสูงสุดแล้ว ขอบคุณที่ไว้วางใจ</span>
+                )}
+              </span>
+              <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/70">
+                +5 ฟรีวันนี้
+              </span>
+            </div>
+          </div>
+
+          {/* Bottom Row: Check-in nudge & CTA Button */}
+          <div className="flex items-center justify-between pt-0.5 relative z-10">
+            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[15px] text-amber-500">check_circle</span>
+              <span>เช็คอินและทำภารกิจสะสมแต้ม</span>
+            </span>
+
+            <div className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/90 font-bold px-3 py-1.5 rounded-xl text-xs transition-all shadow-2xs flex items-center gap-0.5 group-hover:border-amber-400">
+              <span>สิทธิประโยชน์</span>
+              <span className="material-symbols-outlined text-[15px] group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+            </div>
           </div>
         </div>
 
         {/* Card 4: สินเชื่อ — Loading State / Empty State / Contracts */}
         {dataContact === null || dataInterest === null ? (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-lg shadow-sm flex flex-col items-center justify-center py-10 gap-sm">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary/20 border-t-primary mb-2"></div>
-            <p className="text-label-md font-bold text-primary font-sans">กำลังโหลดข้อมูลสินเชื่อ...</p>
-            <p className="text-xs text-on-surface-variant font-sans">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจากฐานข้อมูล</p>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-8 shadow-xs flex flex-col items-center justify-center py-10 gap-2">
+            <div className="animate-spin rounded-full h-9 w-9 border-3 border-primary/20 border-t-primary mb-2"></div>
+            <p className="text-sm font-bold text-slate-800 font-sans">กำลังโหลดข้อมูลสินเชื่อ...</p>
+            <p className="text-xs text-slate-500 font-sans">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจากฐานข้อมูล</p>
           </div>
         ) : activeContacts.length === 0 ? (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-primary/30 transition-all">
-            <div className="p-md flex flex-col gap-sm">
-              <div className="flex items-center gap-xs">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
-                </div>
-                <div>
-                  <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
-                  <h4 className="text-label-lg font-bold text-primary font-sans">ข้อมูลสัญญากู้ยืม</h4>
-                </div>
-              </div>
-              <p className="text-center text-on-surface-variant py-4 font-sans text-sm">ไม่พบข้อมูลสัญญาเงินกู้ในระบบ</p>
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col items-center text-center gap-2">
+            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-1 text-slate-400">
+              <span className="material-symbols-outlined text-[26px]">receipt_long</span>
             </div>
+            <h4 className="text-base font-bold text-slate-800 font-sans">ยังไม่มีสัญญาเงินกู้ที่เปิดบริการ</h4>
+            <p className="text-xs text-slate-500 font-sans max-w-xs">
+              หากท่านมีสัญญาเงินกู้กับบริษัท ทรัพย์สำราญ พิโก จำกัด สามารถสมัครรับแจ้งเตือนหรือติดต่อเจ้าหน้าที่ได้ทันที
+            </p>
           </div>
         ) : (
           activeContacts.map((c, idx) => {
@@ -628,6 +783,7 @@ function Home() {
               totalCount,
               progressPercent
             } = getContractProgression(c, contractInstallments);
+            const collateral = getCollateralTypeInfo(c.Claimthing);
 
             return (
               <div 
@@ -642,175 +798,188 @@ function Home() {
                   }
                 }}
                 aria-label={`ดูรายละเอียดสัญญาที่ ${idx + 1} เลขที่ ${c.ID_contact}`}
-                className="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden hover:border-secondary/60 hover:shadow-sm transition-all cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-primary/40 transition-all cursor-pointer flex flex-col overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group"
               >
-                <div className="p-md flex flex-col gap-sm">
-                  {/* Header row */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-xs">
-                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-primary text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>receipt_long</span>
+                <div className="p-4 flex flex-col gap-3">
+                  {/* Top Bar: Contract Number, Collateral Type & Status */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${collateral.iconContainerClass}`}>
+                        <span className="material-symbols-outlined text-[20px]">{collateral.icon}</span>
                       </div>
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans leading-none">สินเชื่อของฉัน</p>
-                        <h4 className="text-label-lg font-bold text-primary font-sans">สัญญาที่ {idx + 1}</h4>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-sm font-bold text-slate-900 font-sans">สัญญาที่ {idx + 1}</h4>
+                          <span className="text-[11px] font-mono text-slate-500 font-semibold">({c.ID_contact})</span>
+                        </div>
                       </div>
                     </div>
+
                     {nextInst ? (
-                      <span className="bg-error-container text-on-error-container px-sm py-0.5 rounded-full text-xs font-bold font-sans">รอชำระ</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /> รอชำระ
+                      </span>
                     ) : (
-                      <span className="bg-green-100 text-green-700 px-sm py-0.5 rounded-full text-xs font-bold font-sans">ชำระครบแล้ว</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> ชำระครบแล้ว
+                      </span>
                     )}
                   </div>
 
-                  {/* Contract Info */}
-                  <div className="bg-primary/5 rounded-lg border border-primary/10 p-md flex flex-col gap-md">
-                    {/* Borrower Name Badge */}
-                    <div className="bg-amber-50 border border-amber-200/90 rounded-lg px-3 py-1.5 flex items-center justify-between shadow-xs">
-                      <div className="flex items-center gap-1.5 text-xs text-amber-950 font-bold font-sans">
-                        <span className="material-symbols-outlined text-[18px] text-amber-700">person</span>
-                        <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
-                      </div>
+                  {/* Borrower Chip & Guarantor Info */}
+                  <div className="bg-slate-50 border border-slate-200/70 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2 text-xs text-slate-700 font-medium">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="material-symbols-outlined text-[16px] text-slate-400 shrink-0">person</span>
+                      <span className="truncate">ผู้กู้: <strong className="text-slate-900">{c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</strong></span>
                     </div>
+                    {c.Claimthing === 'บุคคล' && c.name_claim ? (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0 truncate">
+                        <span>ผู้ค้ำ:</span>
+                        <strong className="text-slate-800 truncate max-w-[120px]">{c.name_claim}</strong>
+                      </div>
+                    ) : null}
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-md">
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans">เลขที่สัญญา</p>
-                        <p className="text-body-md font-bold text-primary font-mono mt-xs">{c.ID_contact}</p>
-                      </div>
-                      <div>
-                        <p className="text-label-sm text-on-surface-variant font-sans">กำหนดชำระ</p>
-                        {nextInst ? (
-                          <p className="text-body-md font-bold text-primary mt-xs font-sans">
-                            {formatThaiDate(nextInst.begin_date)}
-                          </p>
-                        ) : (
-                          <p className="text-body-md font-bold text-green-700 mt-xs font-sans">ชำระเงินครบถ้วน</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Progression Section */}
-                    <div className="border-t border-primary/10 pt-sm flex flex-col gap-xs">
-                      <div className="flex justify-between items-center text-xs font-sans">
-                        <span className="text-on-surface-variant font-medium">ความคืบหน้าการผ่อนชำระ</span>
-                        <span className="font-bold text-primary">
-                          {totalCount > 0
-                            ? `ชำระไป ${paidCount} งวดจาก ${totalCount} งวด (${progressPercent}%)`
-                            : `ชำระไป ${paidCount} งวด`}
-                        </span>
-                      </div>
-                      {totalCount > 0 && (
-                        <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-primary h-full rounded-full transition-all duration-500 ease-out" 
-                            style={{ width: `${progressPercent}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="border-t border-primary/10 pt-sm flex items-center justify-between">
+                  {/* Hero Amount & Due Date Box */}
+                  <div className="bg-gradient-to-br from-rose-50/40 via-white to-amber-50/20 rounded-xl border border-rose-100/80 p-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-500 font-sans">ยอดที่ต้องชำระงวดนี้</p>
                       {nextInst ? (
                         <div>
-                          <p className="text-label-sm text-on-surface-variant font-sans">ยอดที่ต้องชำระครั้งถัดไป</p>
-                          <p className="text-headline-sm font-bold text-primary leading-none mt-xs">
+                          <p className="text-2xl font-black text-primary leading-tight mt-0.5">
                             {nextPayTotal.toLocaleString()}
-                            <span className="text-body-md font-normal ml-1">฿</span>
+                            <span className="text-xs font-semibold text-slate-600 ml-1">บาท</span>
                           </p>
                           {nextFee > 0 && (
-                            <p className="text-[11px] font-bold text-red-600 mt-1 font-sans">
-                              (รวมค่าปรับ {nextFee.toLocaleString()} ฿)
+                            <p className="text-[10px] font-bold text-rose-600 mt-0.5">
+                              (รวมค่าปรับ {nextFee.toLocaleString()} บ.)
                             </p>
                           )}
                         </div>
                       ) : (
-                        <div>
-                          <p className="text-label-sm text-on-surface-variant font-sans">สถานะสัญญา</p>
-                          <p className="text-body-md font-bold text-green-700 mt-xs font-sans">ชำระเงินครบถ้วนแล้ว</p>
-                        </div>
+                        <p className="text-base font-bold text-emerald-600 mt-1">ชำระครบถ้วนแล้ว</p>
                       )}
-                      {navigatingContractId === c.ID_contact ? (
-                        <span className="text-xs font-bold text-white bg-primary/80 px-md py-2 rounded-lg flex items-center gap-1.5 font-sans shadow-sm">
-                          <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          กำลังโหลด...
-                        </span>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-[11px] font-semibold text-slate-500 font-sans">กำหนดชำระ</p>
+                      {nextInst ? (
+                        <div className="flex items-center gap-1 mt-0.5 justify-end">
+                          <span className="material-symbols-outlined text-[16px] text-amber-600">event</span>
+                          <span className="text-xs font-bold text-slate-800 font-sans">
+                            {formatThaiDate(nextInst.begin_date)}
+                          </span>
+                        </div>
                       ) : (
-                        <span className="text-xs font-bold text-white bg-primary hover:bg-primary-container px-md py-2 rounded-lg flex items-center gap-0.5 font-sans shadow-sm">
-                          ดูรายละเอียด <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                        </span>
+                        <span className="text-xs font-bold text-emerald-700 mt-1 block">ปิดยอดสัญญาแล้ว</span>
                       )}
                     </div>
                   </div>
+
+                  {/* Progression Section */}
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <div className="flex justify-between items-center text-[11px] font-sans">
+                      <span className="text-slate-500 font-medium">ความคืบหน้าการชำระ</span>
+                      <span className="font-bold text-slate-700">
+                        {totalCount > 0
+                          ? `ชำระแล้ว ${paidCount} / ${totalCount} งวด (${progressPercent}%)`
+                          : `ชำระแล้ว ${paidCount} งวด`}
+                      </span>
+                    </div>
+                    {totalCount > 0 && (
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-primary to-rose-400 h-full rounded-full transition-all duration-500 ease-out" 
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="pt-1">
+                    {navigatingContractId === c.ID_contact ? (
+                      <div className="w-full bg-primary/80 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 font-sans shadow-xs">
+                        <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>กำลังเปิดรายละเอียด...</span>
+                      </div>
+                    ) : (
+                      <div className="w-full bg-primary hover:bg-[#ba2660] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1 font-sans shadow-xs group-hover:shadow-sm active:scale-[0.98] transition-all">
+                        <span>ดูรายละเอียดและชำระค่างวด</span>
+                        <span className="material-symbols-outlined text-[16px] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            )
+            );
           })
         )}
 
-        {/* Card 3: สมัครรับการแจ้งเตือนทางไลน์ / ปุ่มเพิ่มสินเชื่อ */}
+        {/* Card 4: สมัครรับการแจ้งเตือนทางไลน์ / ปุ่มเพิ่มสินเชื่อ */}
         {userContacts.length > 0 ? (
           /* กรณีมียอดสัญญาที่ผูกกับ LINE แล้ว -> แสดงปุ่มเพิ่มสินเชื่อเพื่อสมัครแจ้งเตือน */
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-md flex items-center justify-between gap-md shadow-sm">
-            <div className="flex items-center gap-md">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-primary text-[22px]">notifications_active</span>
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs hover:shadow-sm transition-all">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-primary flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[22px]">notifications_active</span>
               </div>
-              <div>
-                <h4 className="text-body-md font-bold text-primary font-sans leading-tight">สมัครรับแจ้งเตือนเพิ่ม</h4>
-                <p className="text-xs text-on-surface-variant font-sans mt-0.5">มีสัญญาใหม่ต้องการรับแจ้งเตือนทาง LINE ใช่หรือไม่?</p>
+              <div className="min-w-0">
+                <h4 className="text-sm font-bold text-slate-800 font-sans leading-tight">สมัครรับแจ้งเตือนเพิ่ม</h4>
+                <p className="text-xs text-slate-500 font-sans mt-0.5 truncate">ต้องการผูกสัญญาฉบับใหม่เพื่อรับแจ้งเตือนบิลทาง LINE หรือไม่?</p>
               </div>
             </div>
             <button 
               onClick={() => openModal('registerNotify')}
-              className="bg-primary hover:bg-primary-container text-white font-bold text-xs px-md py-2.5 rounded-lg active:scale-95 transition-all shrink-0 flex items-center gap-1 font-sans shadow-sm cursor-pointer"
+              className="bg-primary hover:bg-[#ba2660] text-white font-bold text-xs px-3.5 py-2.5 rounded-xl active:scale-95 transition-all shrink-0 flex items-center gap-1 font-sans shadow-xs cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[16px]">add</span> เพิ่มสินเชื่อ
+              <span className="material-symbols-outlined text-[16px]">add</span> เพิ่มสัญญา
             </button>
           </div>
         ) : (
           /* กรณียังไม่มีสัญญาผูกกับ LINE -> แสดงการ์ดสมัครรับแจ้งเตือนทางไลน์แบบเต็ม */
-          <div className="bg-primary text-white rounded-xl p-lg shadow-md border border-secondary-fixed/40 relative overflow-hidden flex flex-col gap-md transition-all duration-200">
-            {/* Subtle geometric circles in background for premium look */}
-            <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/5 border border-white/5 pointer-events-none" />
-            <div className="absolute -left-6 -top-6 w-24 h-24 rounded-full bg-white/5 border border-white/5 pointer-events-none" />
+          <div className="bg-gradient-to-br from-primary via-[#d83a78] to-[#ba2660] text-white rounded-2xl p-5 shadow-sm border border-amber-200/30 relative overflow-hidden flex flex-col gap-4 transition-all">
+            {/* Subtle geometric circles */}
+            <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/10 pointer-events-none" />
+            <div className="absolute -left-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
 
-            <div className="flex items-start gap-md">
-              <div className="w-12 h-12 rounded-full bg-secondary-fixed/20 flex items-center justify-center shrink-0 border border-secondary-fixed/30 animate-pulse">
-                <span className="material-symbols-outlined text-secondary-fixed text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>notifications_active</span>
+            <div className="flex items-start gap-3 relative z-10">
+              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 border border-white/20">
+                <span className="material-symbols-outlined text-amber-200 text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>notifications_active</span>
               </div>
               <div className="flex-grow">
-                <h3 className="text-body-lg font-bold text-secondary-fixed font-sans leading-snug">สมัครรับแจ้งเตือนทางไลน์</h3>
-                <p className="text-label-sm text-white/80 font-sans mt-xs leading-relaxed">
-                  รับบิลแจ้งยอดเตือนค่างวดล่วงหน้า และรับใบเสร็จในห้องแชท LINE ทันทีเมื่อทำรายการ สะดวก สบาย และปลอดภัย
+                <h3 className="text-base font-bold text-white font-sans leading-snug">สมัครรับแจ้งเตือนค่างวดทาง LINE</h3>
+                <p className="text-xs text-white/80 font-sans mt-1 leading-relaxed">
+                  รับบิลแจ้งเตือนค่างวดล่วงหน้า และรับใบเสร็จอิเล็กทรอนิกส์ในห้องแชททันที สะดวก ปลอดภัย
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-xs border-t border-white/10 pt-md text-[13px] text-white/90">
-              <div className="flex items-center gap-xs">
-                <span className="material-symbols-outlined text-secondary-fixed text-[16px]">check_circle</span>
-                <span><b>แจ้งเตือนอัตโนมัติ:</b> ส่งแจ้งเตือนล่วงหน้า 3 วัน ป้องกันค่าปรับ</span>
+            <div className="grid grid-cols-1 gap-1.5 border-t border-white/15 pt-3 text-xs text-white/90 relative z-10">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-amber-300 text-[16px]">check_circle</span>
+                <span><b>แจ้งเตือนอัตโนมัติ:</b> ล่วงหน้า 3 วัน ป้องกันค่าปรับ</span>
               </div>
-              <div className="flex items-center gap-xs">
-                <span className="material-symbols-outlined text-secondary-fixed text-[16px]">check_circle</span>
-                <span><b>รับใบเสร็จทันที:</b> ระบบส่งใบเสร็จอิเล็กทรอนิกส์เข้าห้องแชททันใจ</span>
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-amber-300 text-[16px]">check_circle</span>
+                <span><b>รับใบเสร็จทันที:</b> ส่งใบเสร็จอิเล็กทรอนิกส์เข้าห้องแชท</span>
               </div>
-              <div className="flex items-center gap-xs">
-                <span className="material-symbols-outlined text-secondary-fixed text-[16px]">check_circle</span>
-                <span><b>เชื่อมต่อง่ายดาย:</b> เชื่อมระบบแจ้งเตือนผ่านบัญชีผู้ใช้ส่วนตัว</span>
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-amber-300 text-[16px]">check_circle</span>
+                <span><b>เชื่อมต่อง่ายดาย:</b> เพียงระบุชื่อผู้กู้และเลขที่สัญญา</span>
               </div>
             </div>
 
-            <div className="flex justify-center mt-sm border-t border-white/10 pt-md">
+            <div className="flex justify-center border-t border-white/15 pt-3 relative z-10">
               <button 
                 onClick={() => openModal('registerNotify')}
-                className="bg-secondary-fixed text-on-background hover:bg-white hover:text-primary text-label-sm font-bold px-xl py-3 rounded-lg active:scale-95 transition-all shadow-md flex items-center gap-1 font-sans w-full sm:w-auto justify-center"
+                className="bg-white text-primary hover:bg-rose-50 text-xs font-bold px-6 py-2.5 rounded-xl active:scale-95 transition-all shadow-xs flex items-center justify-center gap-1 font-sans w-full cursor-pointer"
               >
-                สมัครรับแจ้งเตือนทันที <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                <span>สมัครรับแจ้งเตือนทันที</span>
+                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>
           </div>
@@ -818,20 +987,22 @@ function Home() {
       </main>
 
       {/* Synchronized Bottom Navigation Bar */}
-      <nav role="tablist" className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-xs py-base bg-surface-container-lowest max-w-[600px] mx-auto border-t border-outline-variant shadow-lg rounded-t-xl">
+      <nav role="tablist" className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[600px] z-50 flex justify-around items-center px-2 py-1.5 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-2xl">
         <button 
           onClick={() => handleTabClick('home')}
           role="tab"
           aria-selected={activeTab === 'home' && activeModal === null}
           aria-label="หน้าหลัก"
-          className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none ${
             activeTab === 'home' && activeModal === null
-              ? 'bg-primary text-secondary-fixed scale-105 shadow-md px-md'
-              : 'text-on-surface-variant hover:bg-surface-container-high'
+              ? 'text-primary font-bold'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="material-symbols-outlined">home</span>
-          <span className="text-label-sm font-bold font-sans">หน้าหลัก</span>
+          <div className={`p-1 rounded-xl transition-all ${activeTab === 'home' && activeModal === null ? 'bg-rose-50 text-primary scale-110' : ''}`}>
+            <span className="material-symbols-outlined text-[24px]">home</span>
+          </div>
+          <span className="text-[11px] font-sans mt-0.5">หน้าหลัก</span>
         </button>
 
         <button 
@@ -839,14 +1010,16 @@ function Home() {
           role="tab"
           aria-selected={activeModal === 'contractSelect' || activeTab === 'installments'}
           aria-label="ค่างวด"
-          className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none ${
             activeModal === 'contractSelect' || activeTab === 'installments'
-              ? 'bg-primary text-secondary-fixed scale-105 shadow-md px-md'
-              : 'text-on-surface-variant hover:bg-surface-container-high'
+              ? 'text-primary font-bold'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="material-symbols-outlined">calendar_month</span>
-          <span className="text-label-sm font-bold font-sans">ค่างวด</span>
+          <div className={`p-1 rounded-xl transition-all ${activeModal === 'contractSelect' || activeTab === 'installments' ? 'bg-rose-50 text-primary scale-110' : ''}`}>
+            <span className="material-symbols-outlined text-[24px]">calendar_month</span>
+          </div>
+          <span className="text-[11px] font-sans mt-0.5">ค่างวด</span>
         </button>
 
         <button 
@@ -854,14 +1027,16 @@ function Home() {
           role="tab"
           aria-selected={activeModal === 'bank'}
           aria-label="บัญชี"
-          className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none ${
             activeModal === 'bank'
-              ? 'bg-primary text-secondary-fixed scale-105 shadow-md px-md'
-              : 'text-on-surface-variant hover:bg-surface-container-high'
+              ? 'text-primary font-bold'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="material-symbols-outlined">account_balance</span>
-          <span className="text-label-sm font-bold font-sans">บัญชี</span>
+          <div className={`p-1 rounded-xl transition-all ${activeModal === 'bank' ? 'bg-rose-50 text-primary scale-110' : ''}`}>
+            <span className="material-symbols-outlined text-[24px]">account_balance</span>
+          </div>
+          <span className="text-[11px] font-sans mt-0.5">บัญชี</span>
         </button>
 
         <button 
@@ -869,14 +1044,16 @@ function Home() {
           role="tab"
           aria-selected={activeModal === 'contact'}
           aria-label="ติดต่อ"
-          className={`flex flex-col items-center justify-center p-2 rounded-lg transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer border-0 bg-transparent focus-visible:outline-none ${
             activeModal === 'contact'
-              ? 'bg-primary text-secondary-fixed scale-105 shadow-md px-md'
-              : 'text-on-surface-variant hover:bg-surface-container-high'
+              ? 'text-primary font-bold'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <span className="material-symbols-outlined">support_agent</span>
-          <span className="text-label-sm font-bold font-sans">ติดต่อ</span>
+          <div className={`p-1 rounded-xl transition-all ${activeModal === 'contact' ? 'bg-rose-50 text-primary scale-110' : ''}`}>
+            <span className="material-symbols-outlined text-[24px]">support_agent</span>
+          </div>
+          <span className="text-[11px] font-sans mt-0.5">ติดต่อ</span>
         </button>
       </nav>
 
@@ -1018,33 +1195,42 @@ function Home() {
                     <p className="text-center text-on-surface-variant py-md">ยังไม่มีสัญญาเงินกู้จดทะเบียนในระบบ</p>
                   ) : (
                     <div className="flex flex-col gap-sm">
-                      {userContacts.map((c, i) => (
-                        <div 
-                          key={i} 
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => {
-                            closeModal(false);
-                            router.push(`/Pay?IDcontact=${encodeURIComponent(c.ID_contact)}&autoPay=true`);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
+                      {userContacts.map((c, i) => {
+                        const collateral = getCollateralTypeInfo(c.Claimthing);
+                        return (
+                          <div 
+                            key={i} 
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
                               closeModal(false);
                               router.push(`/Pay?IDcontact=${encodeURIComponent(c.ID_contact)}&autoPay=true`);
-                            }
-                          }}
-                          aria-label={`ชำระเงินสัญญาเลขที่ ${c.ID_contact}`}
-                          className="bg-surface border border-outline-variant rounded-lg p-md flex flex-col gap-xs hover:border-secondary cursor-pointer transition-all hover:bg-secondary-container/5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="text-body-md font-bold text-primary">เลขที่สัญญา: {c.ID_contact}</span>
-                            {c.total_treerest <= 0 ? (
-                              <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">ปิดบัญชีแล้ว</span>
-                            ) : (
-                              <span className="bg-secondary-container text-on-secondary-container text-[10px] font-bold px-2 py-0.5 rounded-full">กำลังผ่อนชำระ</span>
-                            )}
-                          </div>
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                closeModal(false);
+                                router.push(`/Pay?IDcontact=${encodeURIComponent(c.ID_contact)}&autoPay=true`);
+                              }
+                            }}
+                            aria-label={`ชำระเงินสัญญาเลขที่ ${c.ID_contact}`}
+                            className="bg-surface border border-outline-variant rounded-lg p-md flex flex-col gap-xs hover:border-secondary cursor-pointer transition-all hover:bg-secondary-container/5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          >
+                            <div className="flex justify-between items-center gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${collateral.iconContainerClass}`}>
+                                  <span className="material-symbols-outlined text-[18px]">{collateral.icon}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-body-md font-bold text-primary">เลขที่สัญญา: {c.ID_contact}</span>
+                                </div>
+                              </div>
+                              {c.total_treerest <= 0 ? (
+                                <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">ปิดบัญชีแล้ว</span>
+                              ) : (
+                                <span className="bg-secondary-container text-on-secondary-container text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">กำลังผ่อนชำระ</span>
+                              )}
+                            </div>
                           <div className="text-xs text-amber-950 font-bold bg-amber-50 px-2.5 py-1 rounded border border-amber-200/70 flex items-center gap-1 font-sans">
                             <span className="material-symbols-outlined text-[16px] text-amber-700">person</span>
                             <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
@@ -1055,9 +1241,10 @@ function Home() {
                             <p className="col-span-2">เงินต้นคงเหลือ: <span className="font-bold text-error">{c.total_treerest?.toLocaleString()} ฿</span></p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
+                )}
                 </div>
               )}
 
@@ -1226,6 +1413,7 @@ function Home() {
                   <div className="flex flex-col gap-sm">
                     {activeContacts.map((c, i) => {
                       const isSelected = (selectedContractId || activeContacts[0]?.ID_contact) === c.ID_contact;
+                      const collateral = getCollateralTypeInfo(c.Claimthing);
                       return (
                         <div 
                           key={i}
@@ -1240,17 +1428,22 @@ function Home() {
                               : 'hover:bg-secondary-container/5 hover:border-secondary border-outline-variant'
                           }`}
                         >
-                          <div>
-                            <p className="text-body-md font-bold text-primary">เลขที่สัญญา: {c.ID_contact}</p>
-                            <p className="text-xs text-amber-950 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 inline-flex items-center gap-1 mt-0.5">
-                              <span className="material-symbols-outlined text-[14px] text-amber-700">person</span>
-                              <span>ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
-                            </p>
-                            <p className="text-label-sm text-on-surface-variant mt-xs">
-                              ยอดวงเงินกู้: <span className="font-bold">{c.total_loan?.toLocaleString()} ฿</span> | ค่างวด: <span className="font-bold text-primary">{c.paypermonth?.toLocaleString()} ฿</span>
-                            </p>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${collateral.iconContainerClass}`}>
+                              <span className="material-symbols-outlined text-[20px]">{collateral.icon}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-body-md font-bold text-primary">เลขที่สัญญา: {c.ID_contact}</p>
+                              <p className="text-xs text-amber-950 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80 inline-flex items-center gap-1 mt-0.5">
+                                <span className="material-symbols-outlined text-[14px] text-amber-700 shrink-0">person</span>
+                                <span className="truncate">ผู้กู้: {c.Name_loan || c.name || 'ไม่ระบุชื่อ'}</span>
+                              </p>
+                              <p className="text-label-sm text-on-surface-variant mt-xs">
+                                ยอดวงเงินกู้: <span className="font-bold">{c.total_loan?.toLocaleString()} ฿</span> | ค่างวด: <span className="font-bold text-primary">{c.paypermonth?.toLocaleString()} ฿</span>
+                              </p>
+                            </div>
                           </div>
-                          <span className="material-symbols-outlined text-secondary text-[24px] group-hover:translate-x-1 transition-transform">
+                          <span className="material-symbols-outlined text-secondary text-[24px] group-hover:translate-x-1 transition-transform shrink-0">
                             arrow_forward_ios
                           </span>
                         </div>
@@ -1283,6 +1476,14 @@ function Home() {
           </div>
         </div>
       )}
+
+      {/* Rewards & Loyalty Portal Modal */}
+      <RewardsPortal 
+        isOpen={activeModal === 'rewards'} 
+        onClose={closeModal} 
+        currentPoints={userPoints}
+        onPointsChange={(newPts) => setUserPoints(newPts)}
+      />
     </div>
   );
 }

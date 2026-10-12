@@ -3,7 +3,7 @@
 import './App.css';
 import liff from '@line/liff';
 import React, { useEffect, useState } from 'react';
-import { checkIsAdmin } from './services/api';
+import { checkIsAdmin, syncLineUser } from './services/api';
 
 export const AuthContext = React.createContext();
 
@@ -58,6 +58,9 @@ export const AuthProvider = ({ children }) => {
           setPictureUrl(profile.pictureUrl || "");
           setIdToken(token || "");
 
+          // ⭐️ Auto-register / sync LINE user in Supabase in background
+          syncLineUser(profile).catch((err) => console.warn('Auto sync line user error:', err));
+
           const adminStatus = await checkIsAdmin(profile.userId);
           setIsAdmin(adminStatus);
           setIsAuthLoading(false);
@@ -86,6 +89,13 @@ export const AuthProvider = ({ children }) => {
     setUserId(fallbackUserId);
     setDisplayName("คุณทรัพย์สำราญ");
     setPictureUrl("");
+
+    // Auto-sync fallback test user as well
+    syncLineUser({
+      userId: fallbackUserId,
+      displayName: "คุณทรัพย์สำราญ",
+      pictureUrl: ""
+    }).catch((err) => console.warn('Auto sync line user error (fallback):', err));
 
     try {
       const adminStatus = await checkIsAdmin(fallbackUserId);

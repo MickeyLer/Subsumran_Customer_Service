@@ -22,7 +22,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #fff0f4 !important;
+  background-color: #f8f9fa !important;
 }
 
 /* Force minimum 16px font-size on all form inputs to prevent iOS Safari / LINE WebView Auto-Zoom */

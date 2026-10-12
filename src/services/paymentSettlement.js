@@ -1,3 +1,4 @@
+import supabase from '../supabaseClient';
 import { uploadFileToStorage } from './storageSeam';
 import {
   addTransaction,
@@ -6,6 +7,7 @@ import {
   fetchLatestGlobalInvoices,
 } from './api';
 import { calculateOverdueFee, calculateOverdueFeeDetails, parseAppDate } from '../utils/installmentProgression';
+import { DateTime } from 'luxon';
 
 /**
  * Payment Settlement Module
@@ -68,8 +70,11 @@ export const submitPaymentSettlement = async ({
   contractId = '',
   accumulate,
   slipFile,
+  slipUrl: passedSlipUrl,
+  contract = {},
+  settings = {},
 }) => {
-  if (!slipFile) {
+  if (!slipFile && !passedSlipUrl) {
     throw new Error('กรุณาอัพโหลดสลิปการโอนเงิน');
   }
   if (!selectedInstallments || selectedInstallments.length === 0) {
@@ -89,10 +94,13 @@ export const submitPaymentSettlement = async ({
   // 2. Generate Next Invoice ID
   const invoiceID = await generateNextInvoiceID();
 
-  // 3. Upload slip file to storage
-  const timestamp = Date.now();
-  const storagePath = `slips/${contractId}/${timestamp}_${slipFile.name}`;
-  const slipUrl = await uploadFileToStorage(slipFile, storagePath);
+  // 3. Resolve slip URL (use passed URL or upload file to storage)
+  let slipUrl = passedSlipUrl;
+  if (!slipUrl && slipFile) {
+    const timestamp = Date.now();
+    const storagePath = `slips/${contractId}/${timestamp}_${slipFile.name || 'slip.jpg'}`;
+    slipUrl = await uploadFileToStorage(slipFile, storagePath);
+  }
 
   // 4. Format current payment date string (YYYY-MM-DD)
   const now = new Date();
@@ -105,10 +113,48 @@ export const submitPaymentSettlement = async ({
     (a, b) => a.number_pay - b.number_pay
   );
   const numPayLabel = sortedInstallments.map((r) => r.number_pay).join(',');
+  const newRest = Math.max(0, rest - totalTree);
+  const totalAmount = totalTree + totalInterest + totalLateInterest + totalCollectionFee;
 
-  // 5. Create Transaction Record
-  const transactionData = {
+  // Calculate Next Due Date (advancing 1 month)
+  const currentDueStr = contract?.Next_duedate || contract?.date_contact || paymentDateStr;
+  let nextDueDateStr = paymentDateStr;
+  try {
+    const d = DateTime.fromISO(currentDueStr);
+    nextDueDateStr = (d.isValid ? d : DateTime.fromISO(paymentDateStr)).plus({ months: 1 }).toISODate();
+  } catch (e) {
+    const nextMonth = new Date(now);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    nextDueDateStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-${String(nextMonth.getDate()).padStart(2, '0')}`;
+  }
+
+  // 5. Prepare chart updates for atomic process_payment_v2 RPC
+  let runningRest = rest;
+  const chartUpdates = sortedInstallments.map((inst) => {
+    runningRest -= Number(inst.tree);
+    const instDetails = calculateOverdueFeeDetails(inst, contract, settings);
+    return {
+      id: String(inst.ID),
+      pay_date: paymentDateStr,
+      reference: invoiceID,
+      paytree: String(inst.tree),
+      payinter: String(inst.interest),
+      payfee2: String(instDetails.lateInterest),
+      payfee3: String(instDetails.collectionFee),
+      dis_fee2: '0',
+      dis_fee3: '0',
+      resttree: String(Math.max(0, runningRest)),
+      accu: '0',
+      payroute: 'เงินโอน',
+      user_record: 'LINE-LIFF',
+      status: 1,
+    };
+  });
+
+  // 6. Prepare Transaction Record data
+  const txData = {
     type: 'จ่าย',
+    Timestamp: new Date().toISOString(),
     Invoice: invoiceID,
     ID_contact: contractId,
     Number_pay: numPayLabel,
@@ -121,39 +167,76 @@ export const submitPaymentSettlement = async ({
     fee1: 0,
     fee2: totalLateInterest, // ค่าปรับล่าช้า (Late interest)
     fee3: totalCollectionFee, // ค่าทวงถาม (Collection fee)
+    dis_fee2: '0',
+    dis_fee3: '0',
     payroute: 'เงินโอน',
     accu: '0',
-    status: 'pending',
-    pdf_link: slipUrl,
+    accu_discount: '0',
+    rest_loan: String(newRest),
+    due_date: nextDueDateStr,
+    user_record: 'LINE-LIFF',
+    income: String(totalAmount),
+    slip_url: slipUrl,
+    pdf_link: '',
   };
-  await addTransaction(transactionData);
 
-  // 6. Update individual installment rows in Interest_chart
-  let runningRest = rest;
-  for (const inst of sortedInstallments) {
-    runningRest -= Number(inst.tree);
-    const instDetails = calculateOverdueFeeDetails(inst, contract, settings);
-    await updateInterestChart(inst.ID, {
-      pay_date: paymentDateStr,
-      reference: invoiceID,
-      paytree: String(inst.tree),
-      payinter: String(inst.interest),
-      payfee2: String(instDetails.lateInterest),
-      payfee3: String(instDetails.collectionFee),
-      Rest: String(runningRest),
-      payroute: 'เงินโอน',
-      pdf_link: slipUrl,
-      status: 1,
+  // 7. Execute Atomic Database Update via process_payment_v2 (Same as my-app - Copy)
+  let rpcSuccess = false;
+  try {
+    const { error: rpcError } = await supabase.rpc('process_payment_v2', {
+      p_tx_data: txData,
+      p_contact_id: contractId,
+      p_contact_update: {
+        last_datepay: paymentDateStr,
+        total_treerest: newRest,
+        Next_duedate: nextDueDateStr,
+        accumulate: accumulate ? Number(accumulate) : 0,
+      },
+      p_chart_updates: chartUpdates,
     });
+
+    if (!rpcError) {
+      rpcSuccess = true;
+      console.log('✅ process_payment_v2 executed successfully with pessimistic lock!');
+      if (slipUrl) {
+        await supabase.from('transaction').update({ slip_url: slipUrl }).eq('Invoice', invoiceID).catch(() => {});
+      }
+    } else {
+      console.warn('RPC process_payment_v2 returned error, falling back to sequential updates:', rpcError);
+    }
+  } catch (rpcErr) {
+    console.warn('RPC process_payment_v2 threw error, falling back to sequential updates:', rpcErr);
   }
 
-  // 7. Update Contact record balance
-  const newRest = rest - totalTree;
-  await updateContactData(contractId, {
-    last_datepay: paymentDateStr,
-    total_treerest: newRest,
-    accumulate: accumulate,
-  });
+  // Fallback to sequential updates if RPC was not used
+  if (!rpcSuccess) {
+    await addTransaction({ ...txData, status: 'pending' });
+
+    let fallbackRest = rest;
+    for (const inst of sortedInstallments) {
+      fallbackRest -= Number(inst.tree);
+      const instDetails = calculateOverdueFeeDetails(inst, contract, settings);
+      await updateInterestChart(inst.ID, {
+        pay_date: paymentDateStr,
+        reference: invoiceID,
+        paytree: String(inst.tree),
+        payinter: String(inst.interest),
+        payfee2: String(instDetails.lateInterest),
+        payfee3: String(instDetails.collectionFee),
+        Rest: String(Math.max(0, fallbackRest)),
+        payroute: 'เงินโอน',
+        slip_url: slipUrl,
+        pdf_link: '',
+        status: 1,
+      });
+    }
+
+    await updateContactData(contractId, {
+      last_datepay: paymentDateStr,
+      total_treerest: newRest,
+      accumulate: accumulate,
+    });
+  }
 
   return {
     success: true,

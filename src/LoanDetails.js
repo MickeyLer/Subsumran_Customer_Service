@@ -7,6 +7,7 @@ import { fetchContactById, fetchInterestByContact } from './services/api';
 import { ChevronLeft, Receipt, CheckCircle, Clock, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { getContractProgression, formatThaiDate } from './utils/installmentProgression';
+import { getCollateralTypeInfo } from './utils/collateralType';
 
 function LoanDetails() {
   const searchParams = useSearchParams();
@@ -82,7 +83,7 @@ function LoanDetails() {
     progressPercent
   } = getContractProgression(contract, installments);
 
-
+  const collateral = getCollateralTypeInfo(contract?.Claimthing);
 
   const [isNavigatingPay, setIsNavigatingPay] = useState(false);
 
@@ -122,12 +123,20 @@ function LoanDetails() {
           <>
             {/* 1. Basic Contract Info Card */}
             <div className="bg-surface-container-lowest rounded-xl shadow-md border border-outline-variant overflow-hidden">
-              <div className="bg-primary/5 border-b border-outline-variant/30 p-md flex items-center gap-sm">
-                <span className="material-symbols-outlined text-primary text-[24px]">receipt_long</span>
-                <div>
-                  <p className="text-[11px] text-outline font-semibold font-sans tracking-wider">เลขที่สัญญา</p>
-                  <h3 className="text-body-lg font-black text-primary font-mono">{contract.ID_contact}</h3>
+              <div className="bg-primary/5 border-b border-outline-variant/30 p-md flex items-center justify-between gap-2">
+                <div className="flex items-center gap-sm">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${collateral.iconContainerClass}`}>
+                    <span className="material-symbols-outlined text-[22px]">{collateral.icon}</span>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-outline font-semibold font-sans tracking-wider">เลขที่สัญญา</p>
+                    <h3 className="text-body-lg font-black text-primary font-mono">{contract.ID_contact}</h3>
+                  </div>
                 </div>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${collateral.badgeClass}`}>
+                  <span className="material-symbols-outlined text-[14px]">{collateral.icon}</span>
+                  {collateral.fullLabel}
+                </span>
               </div>
               
               <div className="p-md flex flex-col gap-md font-sans">
@@ -138,10 +147,24 @@ function LoanDetails() {
                     <p className="text-body-md font-bold text-primary mt-xs">{contract.Name_loan}</p>
                   </div>
                   <div>
-                    <p className="text-label-sm text-on-surface-variant font-medium">ผู้ค้ำประกัน</p>
-                    <p className="text-body-md font-bold text-primary mt-xs">{contract.name_claim || '-'}</p>
+                    <p className="text-label-sm text-on-surface-variant font-medium">
+                      {contract.Claimthing === 'บุคคล' ? 'ผู้ค้ำประกัน' : 'หลักค้ำประกัน'}
+                    </p>
+                    <p className="text-body-md font-bold text-primary mt-xs">
+                      {contract.Claimthing === 'บุคคล' ? (contract.name_claim || '-') : collateral.label}
+                    </p>
                   </div>
                 </div>
+
+                {contract.Claimdetail && (
+                  <div className="bg-surface border border-outline-variant/50 p-sm rounded-lg">
+                    <p className="text-label-sm text-on-surface-variant font-medium flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px]">{collateral.icon}</span>
+                      <span>รายละเอียดหลักค้ำประกัน ({collateral.label})</span>
+                    </p>
+                    <p className="text-[13px] text-on-surface mt-xs leading-relaxed">{contract.Claimdetail}</p>
+                  </div>
+                )}
 
                 <hr className="border-outline-variant/30" />
 

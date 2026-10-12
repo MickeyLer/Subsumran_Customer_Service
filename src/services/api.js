@@ -448,3 +448,81 @@ export const addAdminUser = async (lineUserId, name = '') => {
     return handleResponse(data, error, 'addAdminUser');
 };
 
+// ==========================================
+// LINE USER (AUTO-REGISTER / SYNC) APIs
+// ==========================================
+
+export const syncLineUser = async (profile) => {
+    if (!profile?.userId) return null;
+    try {
+        const payload = {
+            line_user_id: profile.userId,
+            display_name: profile.displayName || 'ลูกค้าทั่วไป',
+            picture_url: profile.pictureUrl || '',
+            last_active_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('line_users')
+            .upsert(payload, {
+                onConflict: 'line_user_id'
+            })
+            .select()
+            .maybeSingle();
+
+        if (error) {
+            console.warn('Auto-register line_users warning:', error.message);
+            return null;
+        }
+        return data;
+    } catch (err) {
+        console.error('Error during auto-register in line_users:', err);
+        return null;
+    }
+};
+
+// ==========================================
+// PENDING PAYMENTS (1-CLICK APPROVAL) APIs
+// ==========================================
+
+export const createPendingPayment = async (pendingData) => {
+    console.log("Saving Pending Payment to Supabase:", pendingData);
+    const { data, error } = await supabase
+        .from('pending_payments')
+        .insert([pendingData])
+        .select()
+        .single();
+    return handleResponse(data, error, 'createPendingPayment');
+};
+
+export const fetchPendingPaymentById = async (id) => {
+    if (!id) return null;
+    const { data, error } = await supabase
+        .from('pending_payments')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+    return handleResponse(data, error, 'fetchPendingPaymentById');
+};
+
+export const updatePendingPaymentStatus = async (id, updateData) => {
+    if (!id) return null;
+    const { data, error } = await supabase
+        .from('pending_payments')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+    return handleResponse(data, error, 'updatePendingPaymentStatus');
+};
+
+export const fetchPendingPayments = async (status = 'pending') => {
+    let query = supabase.from('pending_payments').select('*').order('created_at', { ascending: false });
+    if (status) {
+        query = query.eq('status', status);
+    }
+    const { data, error } = await query;
+    return handleResponse(data, error, 'fetchPendingPayments') || [];
+};
+
+
