@@ -18,6 +18,8 @@ import {
 import { notifyLineGroup } from '../utils/lineNotifyHelper';
 import StandardReceiptA4 from './StandardReceiptA4';
 import { sendReceiptToGoogleAppsScript } from '../utils/senttoAppscript';
+import supabase from '../supabaseClient';
+import { calculateTierInfo } from '../utils/tierConfig';
 
 /**
  * PaymentWizard — UI/UX Pro Max Edition
@@ -293,6 +295,59 @@ const PaymentWizard = ({
           reason: '🤖 AI ตรวจสอบผ่าน 100% ตัดยอดและออกใบเสร็จอัตโนมัติ',
         }).catch(err => console.error('Failed to notify LINE group:', err));
 
+        // 🌟 บันทึกคะแนนสะสม (Loyalty Points) เข้า Supabase line_users & points_transactions
+        let pointsAwarded = 0;
+        try {
+          const lineUid = contract?.userID || '';
+          if (lineUid) {
+            const paymentPts = 50;
+            const slipPts = 20; // แนบสลิปผ่าน AI OCR สำเร็จ
+            pointsAwarded = paymentPts + slipPts;
+
+            const { data: userRow } = await supabase
+              .from('line_users')
+              .select('total_points')
+              .eq('line_user_id', lineUid)
+              .maybeSingle();
+
+            if (userRow) {
+              const currentTotal = Number(userRow.total_points || 0);
+              const newPts = currentTotal + pointsAwarded;
+              const newTier = calculateTierInfo(newPts);
+
+              await supabase
+                .from('line_users')
+                .update({ 
+                  total_points: newPts,
+                  tier_level: newTier.name,
+                  last_active_at: new Date().toISOString()
+                })
+                .eq('line_user_id', lineUid);
+
+              await supabase
+                .from('points_transactions')
+                .insert([
+                  {
+                    line_user_id: lineUid,
+                    points: paymentPts,
+                    type: 'EARN',
+                    description: `ชำระค่างวดตรงเวลา สัญญา ${idContact}`,
+                    reference_id: String(settlementResult.invoiceID)
+                  },
+                  {
+                    line_user_id: lineUid,
+                    points: slipPts,
+                    type: 'EARN',
+                    description: 'แนบสลิปผ่าน AI OCR สำเร็จ',
+                    reference_id: `ocr_${settlementResult.invoiceID}`
+                  }
+                ]);
+            }
+          }
+        } catch (ptsErr) {
+          console.warn('Failed to record loyalty points on payment:', ptsErr);
+        }
+
         Swal.fire({
           icon: 'success',
           title: 'ชำระค่างวดสำเร็จเรียบร้อย!',
@@ -300,6 +355,12 @@ const PaymentWizard = ({
             <p class="font-semibold text-emerald-600">🤖 AI ตรวจสอบความถูกต้องเรียบร้อย เงินเข้าแล้ว</p>
             <p class="text-slate-700">เลขที่ใบเสร็จ: <b class="text-emerald-700">${settlementResult.invoiceID}</b></p>
             <p class="text-slate-700">ยอดชำระ: <b>${Number(totalpay).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</b></p>
+            ${pointsAwarded > 0 ? `
+              <div class="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-bold flex items-center justify-between">
+                <span>🎉 ได้รับคะแนนสะสม</span>
+                <span class="text-primary font-black">+${pointsAwarded} แต้ม</span>
+              </div>
+            ` : ''}
           </div>`,
           showCancelButton: true,
           confirmButtonText: '📄 เปิดดูใบเสร็จรับเงิน',
@@ -521,12 +582,23 @@ const PaymentWizard = ({
                     <span className="font-semibold text-primary">{totalInterest.toLocaleString()} ฿</span>
                   </div>
                   {lateInterest > 0 && (
-                    <div className="flex justify-between p-3.5 border-b border-slate-100 text-red-600">
-                      <span className="flex items-center gap-1 font-medium">
-                        <AlertTriangle size={14} /> ค่าปรับล่าช้า
-                      </span>
-                      <span className="font-bold">{lateInterest.toLocaleString()} ฿</span>
-                    </div>
+                    <>
+                      <div className="flex justify-between p-3.5 border-b border-slate-100 text-red-600">
+                        <span className="flex items-center gap-1 font-medium">
+                          <AlertTriangle size={14} /> ค่าปรับล่าช้า
+                        </span>
+                        <span className="font-bold">{lateInterest.toLocaleString()} ฿</span>
+                      </div>
+                      <div className="px-3.5 py-2 bg-amber-50 text-amber-900 text-xs border-b border-amber-100 flex items-center justify-between gap-1.5 font-sans">
+                        <span className="flex items-center gap-1 font-medium">
+                          <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                          ถ้ามีข้อสงสัยให้ติดต่อเจ้าหน้าที่
+                        </span>
+                        <a href="tel:0642201381" className="text-amber-700 hover:text-amber-800 font-bold underline text-[11px] shrink-0">
+                          โทร. 064-220-1381
+                        </a>
+                      </div>
+                    </>
                   )}
                   {collectionFee > 0 && (
                     <div className="flex justify-between p-3.5 border-b border-slate-100 text-amber-600">

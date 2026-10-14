@@ -90,6 +90,7 @@ export const sendReceiptToGoogleAppsScript = async (receiptRef, paymentData = {}
       paymentData: {
         ...paymentData,
         imageUrl: imageUrl,
+        source: 'lineliff',
       },
     };
 

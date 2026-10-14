@@ -29,7 +29,7 @@ function Home() {
   const { dataContact, dataCustomer, dataInterest, refreshUserData, ensureAdminDataLoaded } = useContext(DataContext) || {};
 
   // Loyalty & Points State (Synced with Supabase line_users)
-  const [userPoints, setUserPoints] = useState(380);
+  const [userPoints, setUserPoints] = useState(0);
 
   useEffect(() => {
     if (!userId) return;

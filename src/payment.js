@@ -8,7 +8,7 @@ import { DataContext } from './DataContext';
 import { fetchContactById, fetchInterestByContact } from './services/api';
 import { addMonths } from '@progress/kendo-date-math';
 import DateDiff from 'date-diff';
-import { ChevronLeft, CreditCard, AlertTriangle, CheckCircle, Clock, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, CreditCard, AlertTriangle, CheckCircle, Clock, ShoppingCart, AlertCircle, Phone, ChevronRight } from 'lucide-react';
 import { getContractProgression, formatThaiDate, parseAppDate } from './utils/installmentProgression';
 
 function Pay() {
@@ -230,16 +230,35 @@ function Pay() {
                   </div>
 
                   {/* Late fee / Fine (fee2) */}
-                  <div className="flex justify-between py-3.5 items-center">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full ${nextFeeDetails?.lateInterest > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
-                      <span className={`${nextFeeDetails?.lateInterest > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
-                        ค่าปรับล่าช้า (Late Fee)
+                  <div className="py-3.5">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${nextFeeDetails?.lateInterest > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
+                        <span className={`${nextFeeDetails?.lateInterest > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
+                          ค่าปรับล่าช้า (Late Fee)
+                        </span>
+                      </div>
+                      <span className={`font-bold text-base ${nextFeeDetails?.lateInterest > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                        {nextFeeDetails?.lateInterest > 0 ? `${nextFeeDetails.lateInterest.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
                       </span>
                     </div>
-                    <span className={`font-bold text-base ${nextFeeDetails?.lateInterest > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                      {nextFeeDetails?.lateInterest > 0 ? `${nextFeeDetails.lateInterest.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
-                    </span>
+
+                    {/* Notice for Customer when there is Late Fee */}
+                    {nextFeeDetails?.lateInterest > 0 && (
+                      <div className="mt-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl p-2.5 px-3 flex items-center justify-between gap-2 text-xs text-amber-900 font-sans shadow-xs">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                          <span>ถ้ามีข้อสงสัยให้ติดต่อเจ้าหน้าที่</span>
+                        </div>
+                        <a
+                          href="tel:0642201381"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] shrink-0 no-underline transition-all active:scale-95 shadow-xs"
+                        >
+                          <Phone size={12} />
+                          โทรติดต่อ
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {/* Collection Fee (fee3) */}
@@ -279,10 +298,11 @@ function Pay() {
                 {/* Confirm Pay Button */}
                 <button
                   onClick={handlePayNextInstallment}
-                  className="w-full bg-primary text-white hover:bg-primary-container font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 text-base border-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/35 cursor-pointer mt-4"
+                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-700/25 transition-all active:scale-[0.98] text-base border border-emerald-500/30 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/40 cursor-pointer mt-4"
                 >
-                  <ShoppingCart size={20} />
-                  ดำเนินการชำระค่างวดที่ {nextInstallment.number_pay}
+                  <ShoppingCart size={20} className="shrink-0" />
+                  <span>ดำเนินการชำระค่างวดที่ {nextInstallment.number_pay}</span>
+                  <ChevronRight size={18} className="shrink-0 opacity-80" />
                 </button>
               </div>
             </div>

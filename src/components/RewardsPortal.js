@@ -68,14 +68,20 @@ const REWARD_ITEMS_MOCK = [
   }
 ];
 
-const INITIAL_TASKS = [
+const getTodayThaiDate = () => {
+  const now = new Date();
+  const thaiTime = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60000);
+  return thaiTime.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+};
+
+const DEFAULT_TASKS = [
   { id: 'task_daily', title: 'เช็คอินประจำวัน', points: 5, icon: '⚡', completed: false, cta: 'เช็คอินวันนี้' },
-  { id: 'task_payment', title: 'ชำระค่างวดตรงเวลา', points: 50, icon: '💳', completed: true, cta: 'สำเร็จแล้ว' },
-  { id: 'task_slip', title: 'แนบสลิปผ่าน AI OCR', points: 20, icon: '🤖', completed: true, cta: 'สำเร็จแล้ว' },
+  { id: 'task_payment', title: 'ชำระค่างวดตรงเวลา', points: 50, icon: '💳', completed: false, cta: 'ไปชำระค่างวด' },
+  { id: 'task_slip', title: 'แนบสลิปผ่าน AI OCR', points: 20, icon: '🤖', completed: false, cta: 'แนบสลิป' },
   { id: 'task_profile', title: 'อัปเดตข้อมูลส่วนตัวครบถ้วน', points: 100, icon: '👤', completed: false, cta: 'อัปเดตข้อมูล' }
 ];
 
-export default function RewardsPortal({ isOpen, onClose, currentPoints = 380, onPointsChange }) {
+export default function RewardsPortal({ isOpen, onClose, currentPoints = 0, onPointsChange }) {
   const authContext = useContext(AuthContext) || {};
   const { userId, displayName, pictureUrl } = authContext;
   const { dataCustomer } = useContext(DataContext) || {};
@@ -84,16 +90,14 @@ export default function RewardsPortal({ isOpen, onClose, currentPoints = 380, on
   const [points, setPoints] = useState(currentPoints);
   const [tier, setTier] = useState(() => calculateTierInfo(currentPoints));
   const [dailyCheckedIn, setDailyCheckedIn] = useState(false);
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [tasks, setTasks] = useState(DEFAULT_TASKS);
+  const [loadingTasks, setLoadingTasks] = useState(true);
   const [rewardItems, setRewardItems] = useState(REWARD_ITEMS_MOCK);
   const [loadingRewards, setLoadingRewards] = useState(true);
 
-  const [history, setHistory] = useState([
-    { id: 'tx_1', title: 'ชำระค่างวดตรงเวลา (งวดที่ 4)', points: +50, type: 'EARN', date: '10 ต.ค. 2026 14:30' },
-    { id: 'tx_2', title: 'แนบสลิปผ่าน AI OCR สำเร็จ', points: +20, type: 'EARN', date: '10 ต.ค. 2026 14:28' },
-    { id: 'tx_3', title: 'เช็คอินประจำวัน', points: +5, type: 'EARN', date: '09 ต.ค. 2026 09:15' },
-    { id: 'tx_4', title: 'แลกคูปองยกเว้นค่าทวงถาม 100 บาท', points: -200, type: 'REDEEM', date: '01 ต.ค. 2026 18:20' }
-  ]);
+  // History state: empty by default, loaded from Supabase points_transactions
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const updateTierInfo = (currentPts) => {
     setTier(calculateTierInfo(currentPts));
@@ -139,56 +143,138 @@ export default function RewardsPortal({ isOpen, onClose, currentPoints = 380, on
     fetchRewardItems();
   }, []);
 
-  // Load points and transaction history from Supabase if userId exists
-  useEffect(() => {
-    if (!userId) return;
+  // Load points, transaction history, and dynamic task status from Supabase
+  const fetchUserData = async () => {
+    if (!userId) {
+      setLoadingHistory(false);
+      setLoadingTasks(false);
+      return;
+    }
 
-    const fetchUserData = async () => {
-      try {
-        // 1. Fetch total points
-        const { data: userData, error: userError } = await supabase
-          .from('line_users')
-          .select('total_points, tier_level')
-          .eq('line_user_id', userId)
-          .maybeSingle();
+    try {
+      setLoadingHistory(true);
+      setLoadingTasks(true);
 
-        if (userData && userData.total_points !== undefined && userData.total_points !== null) {
-          const userPts = Number(userData.total_points);
-          setPoints(userPts);
-          updateTierInfo(userPts);
-        }
+      // 1. Fetch total points & tier from line_users
+      const { data: userData, error: userError } = await supabase
+        .from('line_users')
+        .select('total_points, tier_level')
+        .eq('line_user_id', userId)
+        .maybeSingle();
 
-        // 2. Fetch transaction history from points_transactions
-        const { data: txData, error: txError } = await supabase
-          .from('points_transactions')
-          .select('*')
-          .eq('line_user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (txData && txData.length > 0) {
-          const formattedTx = txData.map(tx => ({
-            id: tx.id,
-            title: tx.description || (tx.points > 0 ? 'ได้รับคะแนน' : 'แลกของรางวัล'),
-            points: tx.points,
-            type: tx.type || (tx.points > 0 ? 'EARN' : 'REDEEM'),
-            date: new Date(tx.created_at).toLocaleString('th-TH', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          }));
-          setHistory(formattedTx);
-        }
-      } catch (err) {
-        console.warn('Error loading user points or history from Supabase:', err);
+      if (userData && userData.total_points !== undefined && userData.total_points !== null) {
+        const userPts = Number(userData.total_points);
+        setPoints(userPts);
+        updateTierInfo(userPts);
       }
-    };
 
-    fetchUserData();
-  }, [userId]);
+      // 2. Fetch transaction history from points_transactions
+      const { data: txData, error: txError } = await supabase
+        .from('points_transactions')
+        .select('*')
+        .eq('line_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (txError) {
+        console.warn('Error loading points_transactions:', txError);
+        setHistory([]);
+      } else if (txData && txData.length > 0) {
+        const formattedTx = txData.map(tx => ({
+          id: tx.id,
+          title: tx.description || (tx.points > 0 ? 'ได้รับคะแนน' : 'แลกของรางวัล'),
+          points: tx.points,
+          type: tx.type || (tx.points > 0 ? 'EARN' : 'REDEEM'),
+          date: new Date(tx.created_at).toLocaleString('th-TH', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }));
+        setHistory(formattedTx);
+      } else {
+        // No transactions found in database: show empty list (no fake mock!)
+        setHistory([]);
+      }
+
+      // 3. Compute dynamic task completion from actual database records
+      const todayStr = getTodayThaiDate();
+      const hasCheckedInToday = Boolean(
+        txData && txData.some(tx => 
+          (tx.reference_id && tx.reference_id.includes(todayStr)) ||
+          (tx.description && tx.description.includes('เช็คอิน') && tx.created_at && tx.created_at.slice(0, 10) === todayStr)
+        )
+      );
+      setDailyCheckedIn(hasCheckedInToday);
+
+      // Check payment status from points_transactions or customer records
+      const hasPayment = Boolean(
+        (txData && txData.some(tx => tx.description && (tx.description.includes('ชำระ') || tx.description.includes('งวด')))) ||
+        (dataCustomer && (dataCustomer.last_datepay || dataCustomer.total_treerest !== undefined))
+      );
+
+      // Check OCR slip status
+      const hasSlip = Boolean(
+        (txData && txData.some(tx => tx.description && (tx.description.includes('สลิป') || tx.description.includes('OCR')))) ||
+        hasPayment
+      );
+
+      // Check profile completion
+      const isProfileComplete = Boolean(
+        dataCustomer && (dataCustomer.Name_loan || dataCustomer.Name || dataCustomer.name) &&
+        (dataCustomer.citizenid || dataCustomer.ID_card || dataCustomer.Tel || dataCustomer.tel)
+      );
+
+      setTasks([
+        { 
+          id: 'task_daily', 
+          title: 'เช็คอินประจำวัน', 
+          points: 5, 
+          icon: '⚡', 
+          completed: hasCheckedInToday, 
+          cta: hasCheckedInToday ? '✓ เช็คอินแล้ว' : 'เช็คอินวันนี้' 
+        },
+        { 
+          id: 'task_payment', 
+          title: 'ชำระค่างวดตรงเวลา', 
+          points: 50, 
+          icon: '💳', 
+          completed: hasPayment, 
+          cta: hasPayment ? '✓ สำเร็จแล้ว' : 'ไปชำระค่างวด' 
+        },
+        { 
+          id: 'task_slip', 
+          title: 'แนบสลิปผ่าน AI OCR', 
+          points: 20, 
+          icon: '🤖', 
+          completed: hasSlip, 
+          cta: hasSlip ? '✓ สำเร็จแล้ว' : 'แนบสลิป' 
+        },
+        { 
+          id: 'task_profile', 
+          title: 'อัปเดตข้อมูลส่วนตัวครบถ้วน', 
+          points: 100, 
+          icon: '👤', 
+          completed: isProfileComplete, 
+          cta: isProfileComplete ? '✓ สำเร็จแล้ว' : 'อัปเดตข้อมูล' 
+        }
+      ]);
+    } catch (err) {
+      console.warn('Error loading user points or history from Supabase:', err);
+    } finally {
+      setLoadingHistory(false);
+      setLoadingTasks(false);
+    }
+  };
+
+  // Re-fetch when modal opens or userId changes
+  useEffect(() => {
+    if (userId) {
+      fetchUserData();
+    }
+  }, [userId, isOpen]);
 
   const handleDailyCheckIn = async () => {
     if (dailyCheckedIn) {
@@ -201,47 +287,120 @@ export default function RewardsPortal({ isOpen, onClose, currentPoints = 380, on
       return;
     }
 
-    const earned = 5;
-    const newTotal = points + earned;
-    setPoints(newTotal);
-    updateTierInfo(newTotal);
-    setDailyCheckedIn(true);
-
-    setTasks(prev => prev.map(t => t.id === 'task_daily' ? { ...t, completed: true, cta: 'รับแล้ว (+5)' } : t));
-
-    setHistory(prev => [
-      { id: `tx_${Date.now()}`, title: 'เช็คอินประจำวัน', points: +earned, type: 'EARN', date: 'วันนี้ (เมื่อครู่)' },
-      ...prev
-    ]);
-
-    // Persist to Supabase
-    try {
-      if (userId) {
-        await supabase
-          .from('line_users')
-          .update({ total_points: newTotal })
-          .eq('line_user_id', userId);
-
-        await supabase
-          .from('points_transactions')
-          .insert({
-            line_user_id: userId,
-            points: earned,
-            type: 'EARN',
-            description: 'เช็คอินประจำวัน',
-            reference_id: `checkin_${new Date().toISOString().slice(0, 10)}`
-          });
-      }
-    } catch (err) {
-      console.warn('Error saving check-in to Supabase:', err);
+    if (!userId) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'ไม่พบข้อมูลผู้ใช้',
+        text: 'กรุณาเข้าสู่ระบบ LINE เพื่อสะสมคะแนน',
+        confirmButtonColor: '#0284c7'
+      });
+      return;
     }
 
-    Swal.fire({
-      icon: 'success',
-      title: '🎉 เช็คอินสำเร็จ! +5 คะแนน',
-      text: `คุณได้รับ 5 คะแนนสะสม ยอดรวมปัจจุบัน: ${newTotal} คะแนน`,
-      confirmButtonColor: '#0284c7'
-    });
+    const earned = 5;
+    const todayStr = getTodayThaiDate();
+    const refId = `checkin_${todayStr}`;
+
+    try {
+      // 1. Double check Supabase to avoid double insertion for the same day
+      const { data: existingCheckin } = await supabase
+        .from('points_transactions')
+        .select('id')
+        .eq('line_user_id', userId)
+        .eq('reference_id', refId)
+        .maybeSingle();
+
+      if (existingCheckin) {
+        setDailyCheckedIn(true);
+        setTasks(prev => prev.map(t => t.id === 'task_daily' ? { ...t, completed: true, cta: '✓ เช็คอินแล้ว' } : t));
+        Swal.fire({
+          icon: 'info',
+          title: 'เช็คอินแล้ววันนี้!',
+          text: 'คุณได้รับคะแนนเช็คอินประจำวันเรียบร้อยแล้ว กลับมาเช็คอินใหม่พรุ่งนี้นะครับ',
+          confirmButtonColor: '#0284c7'
+        });
+        return;
+      }
+
+      // 2. Fetch current points from line_users to prevent desync
+      const { data: userRow } = await supabase
+        .from('line_users')
+        .select('total_points')
+        .eq('line_user_id', userId)
+        .maybeSingle();
+
+      const currentPts = userRow ? Number(userRow.total_points || 0) : points;
+      const newTotal = currentPts + earned;
+
+      // 3. Update line_users
+      await supabase
+        .from('line_users')
+        .update({
+          total_points: newTotal,
+          last_active_at: new Date().toISOString()
+        })
+        .eq('line_user_id', userId);
+
+      // 4. Insert into points_transactions
+      const { data: insertedTx, error: txInsertErr } = await supabase
+        .from('points_transactions')
+        .insert({
+          line_user_id: userId,
+          points: earned,
+          type: 'EARN',
+          description: 'เช็คอินประจำวัน',
+          reference_id: refId
+        })
+        .select()
+        .single();
+
+      if (txInsertErr) {
+        console.error('Error inserting check-in transaction:', txInsertErr);
+      }
+
+      // 5. Update local states
+      setPoints(newTotal);
+      updateTierInfo(newTotal);
+      setDailyCheckedIn(true);
+      setTasks(prev => prev.map(t => t.id === 'task_daily' ? { ...t, completed: true, cta: '✓ เช็คอินแล้ว' } : t));
+
+      setHistory(prev => [
+        {
+          id: insertedTx?.id || `tx_${Date.now()}`,
+          title: 'เช็คอินประจำวัน',
+          points: +earned,
+          type: 'EARN',
+          date: 'วันนี้ (เมื่อครู่)'
+        },
+        ...prev
+      ]);
+
+      Swal.fire({
+        icon: 'success',
+        title: '🎉 เช็คอินสำเร็จ! +5 คะแนน',
+        text: `คุณได้รับ 5 คะแนนสะสม ยอดรวมปัจจุบัน: ${newTotal} คะแนน`,
+        confirmButtonColor: '#0284c7'
+      });
+    } catch (err) {
+      console.error('Error during daily check-in:', err);
+      Swal.fire({
+        icon: 'error',
+        title: 'เกิดข้อผิดพลาด',
+        text: 'ไม่สามารถบันทึกการเช็คอินได้ กรุณาลองใหม่อีกครั้ง',
+        confirmButtonColor: '#0284c7'
+      });
+    }
+  };
+
+  const handleTaskAction = (task) => {
+    if (task.completed) return;
+    if (task.id === 'task_daily') {
+      handleDailyCheckIn();
+    } else if (task.id === 'task_payment' || task.id === 'task_slip') {
+      onClose();
+    } else if (task.id === 'task_profile') {
+      onClose();
+    }
   };
 
   const renderRewardIcon = (img) => {
@@ -565,56 +724,106 @@ export default function RewardsPortal({ isOpen, onClose, currentPoints = 380, on
                 </button>
               </div>
 
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 pt-2">
-                <Zap className="w-4 h-4 text-amber-500" /> ภารกิจสะสมคะแนนเพิ่มเติม
-              </h3>
-
-              <div className="space-y-2.5">
-                {tasks.map(t => (
-                  <div key={t.id} className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl shrink-0">
-                        {t.icon}
-                      </div>
-                      <div>
-                        <h5 className="font-bold text-slate-800 text-sm">{t.title}</h5>
-                        <span className="text-xs text-emerald-600 font-bold">+{t.points} คะแนน</span>
-                      </div>
-                    </div>
-
-                    <span className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
-                      t.completed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {t.completed ? '✓ สำเร็จแล้ว' : t.cta}
-                    </span>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center pt-2">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-amber-500" /> ภารกิจสะสมคะแนนเพิ่มเติม
+                </h3>
+                <button
+                  onClick={fetchUserData}
+                  disabled={loadingTasks}
+                  className="p-1 text-slate-400 hover:text-primary transition rounded-lg hover:bg-slate-100"
+                  title="รีเฟรชภารกิจ"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingTasks ? 'animate-spin text-primary' : ''}`} />
+                </button>
               </div>
+
+              {loadingTasks ? (
+                <div className="py-10 flex flex-col items-center justify-center text-slate-400 gap-2 bg-white rounded-2xl border border-slate-200">
+                  <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+                  <span className="text-xs">กำลังตรวจสอบภารกิจจากระบบ...</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {tasks.map(t => (
+                    <div key={t.id} className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl shrink-0">
+                          {t.icon}
+                        </div>
+                        <div>
+                          <h5 className="font-bold text-slate-800 text-sm">{t.title}</h5>
+                          <span className="text-xs text-emerald-600 font-bold">+{t.points} คะแนน</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleTaskAction(t)}
+                        disabled={t.completed}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          t.completed
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                            : 'bg-primary/10 text-primary hover:bg-primary hover:text-white cursor-pointer active:scale-95'
+                        }`}
+                      >
+                        {t.completed ? '✓ สำเร็จแล้ว' : t.cta}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* 3. HISTORY TAB */}
           {activeTab === 'history' && (
             <div className="space-y-3 animate-fade-in">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-primary" /> ประวัติการรับและใช้คะแนน
-              </h3>
-
-              <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 shadow-sm overflow-hidden">
-                {history.map(item => (
-                  <div key={item.id} className="p-3.5 flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">{item.title}</p>
-                      <p className="text-slate-400 mt-0.5">{item.date}</p>
-                    </div>
-                    <span className={`font-black text-sm ${
-                      item.type === 'EARN' ? 'text-emerald-600' : 'text-red-500'
-                    }`}>
-                      {item.points > 0 ? `+${item.points}` : item.points} แต้ม
-                    </span>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-primary" /> ประวัติการรับและใช้คะแนน
+                </h3>
+                <button
+                  onClick={fetchUserData}
+                  disabled={loadingHistory}
+                  className="p-1 text-slate-400 hover:text-primary transition rounded-lg hover:bg-slate-100"
+                  title="รีเฟรชประวัติ"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingHistory ? 'animate-spin text-primary' : ''}`} />
+                </button>
               </div>
+
+              {loadingHistory ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2 bg-white rounded-2xl border border-slate-200">
+                  <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+                  <span className="text-xs">กำลังโหลดประวัติคะแนนจากระบบ...</span>
+                </div>
+              ) : history.length === 0 ? (
+                <div className="py-12 px-4 text-center bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-2">
+                    📜
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-sm">ยังไม่มีประวัติคะแนนสะสม</h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
+                    เมื่อคุณเช็คอินประจำวัน ชำระค่างวด หรือแลกของรางวัล รายการคะแนนจริงจะแสดงที่นี่
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 shadow-sm overflow-hidden">
+                  {history.map(item => (
+                    <div key={item.id} className="p-3.5 flex justify-between items-center text-xs">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{item.title}</p>
+                        <p className="text-slate-400 mt-0.5">{item.date}</p>
+                      </div>
+                      <span className={`font-black text-sm ${
+                        item.type === 'EARN' ? 'text-emerald-600' : 'text-red-500'
+                      }`}>
+                        {item.points > 0 ? `+${item.points}` : item.points} แต้ม
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
