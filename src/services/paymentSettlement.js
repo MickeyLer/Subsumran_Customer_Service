@@ -6,7 +6,7 @@ import {
   updateContactData,
   fetchLatestGlobalInvoices,
 } from './api';
-import { calculateOverdueFee, calculateOverdueFeeDetails, parseAppDate } from '../utils/installmentProgression';
+import { calculateOverdueFee, calculateOverdueFeeDetails, parseAppDate, applyWaterfall } from '../utils/installmentProgression';
 import { DateTime } from 'luxon';
 
 /**
@@ -73,6 +73,9 @@ export const submitPaymentSettlement = async ({
   slipUrl: passedSlipUrl,
   contract = {},
   settings = {},
+  payMode = 'minimum',
+  breakdown = null,
+  paymentAmount: passedAmount = null,
 }) => {
   if (!slipFile && !passedSlipUrl) {
     throw new Error('กรุณาอัพโหลดสลิปการโอนเงิน');
@@ -81,15 +84,56 @@ export const submitPaymentSettlement = async ({
     throw new Error('ไม่พบงวดที่เลือกสำหรับการชำระเงิน');
   }
 
-  // 1. Resolve fee2 (late interest) and fee3 (collection fee) across selected installments
+  // 1. Resolve fee2 (late interest), fee3 (collection fee), interest, and principal
   let totalLateInterest = 0;
   let totalCollectionFee = 0;
+  let paidPrincipal = totalTree;
+  let paidNormInt = totalInterest;
+  let paidLateInt = 0;
+  let paidCollFee = 0;
+  let totalAmount = 0;
+  let newRest = Math.max(0, rest - totalTree);
 
-  selectedInstallments.forEach((inst) => {
-    const details = calculateOverdueFeeDetails(inst, contract, settings);
-    totalLateInterest += details.lateInterest;
-    totalCollectionFee += details.collectionFee;
-  });
+  if (breakdown) {
+    totalLateInterest = Number(breakdown.lateInterest || 0);
+    totalCollectionFee = Number(breakdown.collectionFee || 0);
+
+    const calcAmount = passedAmount !== null && passedAmount !== undefined
+      ? Number(passedAmount)
+      : (payMode === 'overdue'
+          ? breakdown.totalOverdue
+          : payMode === 'interest'
+            ? breakdown.totalInterestOnly
+            : breakdown.totalMinimum);
+    totalAmount = calcAmount;
+
+    // Apply Waterfall: Collection Fee -> Late Interest -> Normal Interest -> Principal
+    const wf = applyWaterfall(
+      totalAmount,
+      breakdown,
+      breakdown.collectionFee,
+      breakdown.lateInterest,
+      0, // discountCollFee
+      0, // discountLateInt
+      0, // discountNormInt
+      payMode === 'interest'
+    );
+
+    paidCollFee = wf.paidCollFee;
+    paidLateInt = wf.paidLateInt;
+    paidNormInt = wf.paidNormInt;
+    paidPrincipal = wf.paidPrincipal;
+    newRest = wf.newPrincipal;
+  } else {
+    selectedInstallments.forEach((inst) => {
+      const details = calculateOverdueFeeDetails(inst, contract, settings);
+      totalLateInterest += details.lateInterest;
+      totalCollectionFee += details.collectionFee;
+    });
+    paidLateInt = totalLateInterest;
+    paidCollFee = totalCollectionFee;
+    totalAmount = totalTree + totalInterest + totalLateInterest + totalCollectionFee;
+  }
 
   // 2. Generate Next Invoice ID
   const invoiceID = await generateNextInvoiceID();
@@ -110,11 +154,9 @@ export const submitPaymentSettlement = async ({
 
   // Sorted installments for reference
   const sortedInstallments = [...selectedInstallments].sort(
-    (a, b) => a.number_pay - b.number_pay
+    (a, b) => Number(a.number_pay || 0) - Number(b.number_pay || 0)
   );
   const numPayLabel = sortedInstallments.map((r) => r.number_pay).join(',');
-  const newRest = Math.max(0, rest - totalTree);
-  const totalAmount = totalTree + totalInterest + totalLateInterest + totalCollectionFee;
 
   // Calculate Next Due Date (advancing 1 month)
   const currentDueStr = contract?.Next_duedate || contract?.date_contact || paymentDateStr;
@@ -130,28 +172,85 @@ export const submitPaymentSettlement = async ({
 
   // 5. Prepare chart updates for atomic process_payment_v2 RPC
   let runningRest = rest;
-  const chartUpdates = sortedInstallments.map((inst) => {
-    runningRest -= Number(inst.tree);
-    const instDetails = calculateOverdueFeeDetails(inst, contract, settings);
-    return {
-      id: String(inst.ID),
-      pay_date: paymentDateStr,
-      reference: invoiceID,
-      paytree: String(inst.tree),
-      payinter: String(inst.interest),
-      payfee2: String(instDetails.lateInterest),
-      payfee3: String(instDetails.collectionFee),
-      dis_fee2: '0',
-      dis_fee3: '0',
-      resttree: String(Math.max(0, runningRest)),
-      accu: '0',
-      payroute: 'เงินโอน',
-      user_record: 'LINE-LIFF',
-      status: 1,
-    };
-  });
+  let chartUpdates = [];
 
-  // 6. Prepare Transaction Record data
+  if (breakdown && payMode === 'overdue' && sortedInstallments.length > 1) {
+    // Multi-row overdue distribution matching my-app - Copy
+    let remainingPrincipal = paidPrincipal;
+    let remainingNormInt = paidNormInt;
+    let remainingLateInt = paidLateInt;
+    let remainingCollFee = paidCollFee;
+    const overdueFeeLimit = Math.round(totalLateInterest / Math.max(1, sortedInstallments.length));
+    const overdueCollLimit = Math.round(totalCollectionFee / Math.max(1, sortedInstallments.length));
+
+    chartUpdates = sortedInstallments.map((inst, idx) => {
+      const isLast = idx === sortedInstallments.length - 1;
+      const pFee2 = isLast ? remainingLateInt : Math.min(remainingLateInt, overdueFeeLimit);
+      const pFee3 = isLast ? remainingCollFee : Math.min(remainingCollFee, overdueCollLimit);
+      remainingLateInt -= pFee2;
+      remainingCollFee -= pFee3;
+
+      const rowInterestCap = parseFloat(inst.interest || 0);
+      const pInt = isLast ? remainingNormInt : Math.min(remainingNormInt, rowInterestCap);
+      remainingNormInt -= pInt;
+
+      const targetTotal = parseFloat(contract.paypermonth || 0);
+      const pTree = isLast
+        ? remainingPrincipal
+        : Math.min(remainingPrincipal, Math.max(0, targetTotal - pInt - pFee2 - pFee3));
+      remainingPrincipal -= pTree;
+      runningRest -= pTree;
+
+      return {
+        id: String(inst.ID),
+        pay_date: paymentDateStr,
+        reference: invoiceID,
+        paytree: String(Math.round(pTree)),
+        payinter: String(Math.round(pInt)),
+        payfee2: String(Math.round(pFee2)),
+        payfee3: String(Math.round(pFee3)),
+        dis_fee2: String(Math.round(Math.max(0, overdueFeeLimit - pFee2))),
+        dis_fee3: String(Math.round(Math.max(0, overdueCollLimit - pFee3))),
+        resttree: String(Math.round(Math.max(0, runningRest))),
+        accu: '0',
+        payroute: 'เงินโอน',
+        user_record: 'LINE-LIFF',
+        status: 1,
+      };
+    });
+  } else {
+    // Single installment or standard waterfall on targeted installments
+    let remainingNormInt = paidNormInt;
+    let remainingPrincipal = paidPrincipal;
+
+    chartUpdates = sortedInstallments.map((inst, idx) => {
+      const isLast = idx === sortedInstallments.length - 1;
+      const pTree = isLast ? remainingPrincipal : Math.min(remainingPrincipal, Number(inst.tree || 0));
+      const pInt = isLast ? remainingNormInt : Math.min(remainingNormInt, Number(inst.interest || 0));
+      remainingPrincipal -= pTree;
+      remainingNormInt -= pInt;
+      runningRest -= pTree;
+
+      return {
+        id: String(inst.ID),
+        pay_date: paymentDateStr,
+        reference: invoiceID,
+        paytree: String(Math.round(pTree)),
+        payinter: String(Math.round(pInt)),
+        payfee2: String(Math.round(paidLateInt)),
+        payfee3: String(Math.round(paidCollFee)),
+        dis_fee2: String(Math.max(0, totalLateInterest - paidLateInt)),
+        dis_fee3: String(Math.max(0, totalCollectionFee - paidCollFee)),
+        resttree: String(Math.round(Math.max(0, runningRest))),
+        accu: '0',
+        payroute: 'เงินโอน',
+        user_record: 'LINE-LIFF',
+        status: 1,
+      };
+    });
+  }
+
+  // 6. Prepare Transaction Record data (matching my-app - Copy)
   const txData = {
     type: 'จ่าย',
     Timestamp: new Date().toISOString(),
@@ -159,23 +258,23 @@ export const submitPaymentSettlement = async ({
     ID_contact: contractId,
     Number_pay: numPayLabel,
     begindate: paymentDateStr,
-    Number_date: '',
+    Number_date: String(breakdown ? (breakdown.days || '') : ''),
     details: customerName,
     type_income: `เลขที่สัญญา ${contractId}`,
-    tree: String(totalTree),
-    interest: totalInterest,
+    tree: String(Math.round(paidPrincipal)),
+    interest: Math.round(paidNormInt),
     fee1: 0,
-    fee2: totalLateInterest, // ค่าปรับล่าช้า (Late interest)
-    fee3: totalCollectionFee, // ค่าทวงถาม (Collection fee)
-    dis_fee2: '0',
-    dis_fee3: '0',
+    fee2: Math.round(totalLateInterest),
+    fee3: Math.round(totalCollectionFee),
+    dis_fee2: String(Math.max(0, Math.round(totalLateInterest - paidLateInt))),
+    dis_fee3: String(Math.max(0, Math.round(totalCollectionFee - paidCollFee))),
     payroute: 'เงินโอน',
     accu: '0',
     accu_discount: '0',
-    rest_loan: String(newRest),
+    rest_loan: String(Math.round(newRest)),
     due_date: nextDueDateStr,
     user_record: 'LINE-LIFF',
-    income: String(totalAmount),
+    income: String(Math.round(totalAmount)),
     slip_url: slipUrl,
     pdf_link: '',
   };
@@ -243,5 +342,10 @@ export const submitPaymentSettlement = async ({
     invoiceID,
     slipUrl,
     newRest,
+    paidPrincipal,
+    paidNormInt,
+    paidLateInt,
+    paidCollFee,
+    totalAmount,
   };
 };

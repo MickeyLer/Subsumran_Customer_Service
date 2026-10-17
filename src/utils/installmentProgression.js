@@ -186,8 +186,11 @@ export const calcEIRBreakdown = ({ contract = {}, paymentDate, settings = {}, ov
 
   const diffTime = payDate - lastPayDate;
   const days = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
-  const normalInterest = Math.round((principal * annualRate * days) / 365);
   const monthlyInstallment = parseFloat(contract?.paypermonth || 0);
+  const isInterestLoan = contract?.loan_type === 'interest';
+  const normalInterest = isInterestLoan
+    ? monthlyInstallment
+    : Math.round((principal * annualRate * days) / 365);
 
   let lateInterest = 0;
   let collectionFee = 0;
@@ -199,7 +202,6 @@ export const calcEIRBreakdown = ({ contract = {}, paymentDate, settings = {}, ov
   });
 
   const totalOverdue = collectionFee + lateInterest + normalInterest + principal;
-  const isInterestLoan = contract?.loan_type === 'interest';
   const baseInstallment = Math.min(principal, monthlyInstallment);
 
   const totalMinimum = isInterestLoan
@@ -306,6 +308,81 @@ export const applyWaterfall = (
 };
 
 /**
+ * Calculates complete loan payoff / settlement details (ยอดปิดบัญชี).
+ * 
+ * Formula:
+ * Payoff Total = Remaining Principal (total_treerest)
+ *              + Accrued Normal Interest (EIR daily accrued since last payment up to calcDate)
+ *              + Overdue Late Interest (Fee 2, if any past grace period)
+ *              + Overdue Collection Fee (Fee 3, if any past 15/30 days)
+ *              + Accumulated Unsettled Debt (accumulate, if positive)
+ * 
+ * @param {Object} contract - Contract object from contact table
+ * @param {Array} installments - List of installment objects for this contract
+ * @param {Object} [settings] - Company settings object
+ * @param {Date|string} [calcDate] - Date of calculation (defaults to now)
+ * @returns {Object} Payoff details including principal, interest, fees, accumulate, and totalPayoff
+ */
+export const calculatePayoffDetails = (contract = {}, installments = [], settings = {}, calcDate = new Date()) => {
+  const principal = parseFloat(contract?.total_treerest || 0);
+  const targetDate = parseAppDate(calcDate) || new Date();
+  const isClosed = principal <= 0;
+
+  if (isClosed) {
+    return {
+      isClosed: true,
+      principal: 0,
+      normalInterest: 0,
+      lateInterest: 0,
+      collectionFee: 0,
+      accumulate: 0,
+      totalPayoff: 0,
+      days: 0,
+      annualRate: parseFloat(contract?.interest || settings?.normal_interest_rate || 15),
+      calcDateFormatted: formatThaiDate(targetDate),
+      calcDate: targetDate,
+    };
+  }
+
+  const unpaid = (installments || []).filter((row) => row.status !== 1 && String(row.status) !== '1');
+  const today = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+
+  const overdueRows = unpaid.filter((row) => {
+    const due = parseAppDate(row.begin_date);
+    return due && due < today;
+  });
+
+  const paidInstallments = (installments || []).filter((row) => row.status === 1 || String(row.status) === '1');
+
+  const eir = calcEIRBreakdown({
+    contract,
+    paymentDate: targetDate,
+    settings,
+    overdueRows,
+    history: paidInstallments,
+  });
+
+  const rawAccumulate = Number(contract?.accumulate || 0);
+  const accumulateDebt = rawAccumulate > 0 ? rawAccumulate : 0;
+  const totalPayoff = Math.max(0, Math.round(eir.principal + eir.normalInterest + eir.lateInterest + eir.collectionFee + accumulateDebt));
+
+  return {
+    isClosed: false,
+    principal: eir.principal,
+    normalInterest: eir.normalInterest,
+    lateInterest: eir.lateInterest,
+    collectionFee: eir.collectionFee,
+    accumulate: accumulateDebt,
+    totalPayoff,
+    days: eir.days,
+    annualRate: eir.annualRate,
+    isInterestLoan: eir.isInterestLoan,
+    calcDateFormatted: formatThaiDate(targetDate),
+    calcDate: targetDate,
+  };
+};
+
+/**
  * Calculates progression metrics for a specific loan contract.
  * 
  * @param {Object} contract - Contract object from contact table
@@ -319,13 +396,16 @@ export const getContractProgression = (contract, installments = [], settings = {
       paidInstallments: [],
       unpaidInstallments: [],
       sortedUnpaid: [],
+      overdueInstallments: [],
       nextInstallment: null,
-      nextFeeDetails: { lateInterest: 0, collectionFee: 0, totalFee: 0 },
+      nextFeeDetails: { lateInterest: 0, collectionFee: 0, normalInterest: 0, totalFee: 0, overdueCount: 0 },
       nextFee: 0,
       nextPayTotal: 0,
       paidCount: 0,
       totalCount: Number(contract?.month_loan) || 0,
       progressPercent: 0,
+      eirBreakdown: null,
+      payoffDetails: calculatePayoffDetails(contract, [], settings, new Date()),
     };
   }
 
@@ -349,32 +429,79 @@ export const getContractProgression = (contract, installments = [], settings = {
     return timeA - timeB;
   });
 
-  // 3. Next payment resolution
-  const nextInstallment = sortedUnpaid[0] || null;
-  const nextFeeDetails = nextInstallment
-    ? calculateOverdueFeeDetails(nextInstallment, contract, settings)
-    : { lateInterest: 0, collectionFee: 0, totalFee: 0 };
-  const nextFee = nextFeeDetails.totalFee;
-  const nextPayTotal = nextInstallment
-    ? Number(nextInstallment.tree || 0) + Number(nextInstallment.interest || 0) + nextFee
-    : 0;
+  // 3. Overdue installments (unpaid rows where begin_date < today)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overdueInstallments = sortedUnpaid.filter((row) => {
+    const dueDate = parseAppDate(row.begin_date);
+    return dueDate && dueDate < today;
+  });
 
-  // 4. Progression counts & percentages
+  // 4. EIR Breakdown across contract & all overdue rows (matches my-app - Copy)
+  const eirBreakdown = calcEIRBreakdown({
+    contract,
+    paymentDate: new Date(),
+    settings,
+    overdueRows: overdueInstallments,
+    history: paidInstallments,
+  });
+
+  // 5. Next payment resolution
+  const nextInstallment = sortedUnpaid[0] || null;
+  const hasOverdue = overdueInstallments.length > 0;
+
+  // If there are overdue installments, aggregate fees across all overdue rows (matching my-app - Copy)
+  const lateInterest = hasOverdue
+    ? eirBreakdown.lateInterest
+    : (nextInstallment ? calculateLateInterest(nextInstallment, contract, settings) : 0);
+
+  const collectionFee = hasOverdue
+    ? eirBreakdown.collectionFee
+    : (nextInstallment ? calculateCollectionFee(nextInstallment, settings) : 0);
+
+  const normalInterest = eirBreakdown.normalInterest;
+  const totalFee = lateInterest + collectionFee;
+
+  const nextFeeDetails = {
+    lateInterest,
+    collectionFee,
+    normalInterest,
+    totalFee,
+    overdueCount: overdueInstallments.length,
+    days: eirBreakdown.days,
+    annualRate: eirBreakdown.annualRate,
+    isEir: true,
+  };
+
+  // Next pay total defaults to totalMinimum (1 installment + all accumulated overdue fees)
+  const nextPayTotal = hasOverdue
+    ? eirBreakdown.totalMinimum
+    : (nextInstallment
+        ? Number(nextInstallment.tree || 0) + Number(nextInstallment.interest || 0) + totalFee
+        : 0);
+
+  // 6. Progression counts & percentages
   const paidCount = paidInstallments.length;
   const totalCount = Number(contract?.month_loan) || installments.length || 0;
   const progressPercent = totalCount > 0 ? Math.min(100, Math.round((paidCount / totalCount) * 100)) : 0;
+
+  // 7. Payoff settlement calculation
+  const payoffDetails = calculatePayoffDetails(contract, installments, settings, new Date());
 
   return {
     paidInstallments,
     unpaidInstallments,
     sortedUnpaid,
+    overdueInstallments,
     nextInstallment,
     nextFeeDetails,
-    nextFee,
+    nextFee: totalFee,
     nextPayTotal,
     paidCount,
     totalCount,
     progressPercent,
+    eirBreakdown,
+    payoffDetails,
   };
 };
 

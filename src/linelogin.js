@@ -84,16 +84,16 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Fallback for local development or testing without LIFF ID / outside LINE browser
-    const fallbackUserId = "U2cd360ba05fa93c6907ca768afb9a458";
+    const fallbackUserId = process.env.NEXT_PUBLIC_MOCK_LINE_USER_ID || "Ub120a67529206419f81a29dc33b1afd1";
     setRealUserId(fallbackUserId);
     setUserId(fallbackUserId);
-    setDisplayName("คุณทรัพย์สำราญ");
+    setDisplayName("ผู้ใช้ทดสอบ (Mock)");
     setPictureUrl("");
 
     // Auto-sync fallback test user as well
     syncLineUser({
       userId: fallbackUserId,
-      displayName: "คุณทรัพย์สำราญ",
+      displayName: "ผู้ใช้ทดสอบ (Mock)",
       pictureUrl: ""
     }).catch((err) => console.warn('Auto sync line user error (fallback):', err));
 

@@ -42,6 +42,9 @@ const PaymentWizard = ({
   accumulate,
   contract = {},
   settings = {},
+  payMode = 'minimum',
+  eirBreakdown = null,
+  customTotalPay = null,
 }) => {
   const onClose = () => setOpenModal(false);
   const onComplete = () => window.location.reload();
@@ -69,17 +72,29 @@ const PaymentWizard = ({
   useEffect(() => {
     let sumLate = 0;
     let sumColl = 0;
+    let calculatedTotal = 0;
 
-    (selectedInstallments || []).forEach((inst) => {
-      const details = calculateOverdueFeeDetails(inst, contract, settings);
-      sumLate += details.lateInterest;
-      sumColl += details.collectionFee;
-    });
+    if (eirBreakdown) {
+      sumLate = Number(eirBreakdown.lateInterest || 0);
+      sumColl = Number(eirBreakdown.collectionFee || 0);
+      calculatedTotal = customTotalPay !== null && customTotalPay !== undefined
+        ? Number(customTotalPay)
+        : (payMode === 'overdue'
+            ? Number(eirBreakdown.totalOverdue || 0)
+            : payMode === 'interest'
+              ? Number(eirBreakdown.totalInterestOnly || 0)
+              : Number(eirBreakdown.totalMinimum || 0));
+    } else {
+      (selectedInstallments || []).forEach((inst) => {
+        const details = calculateOverdueFeeDetails(inst, contract, settings);
+        sumLate += details.lateInterest;
+        sumColl += details.collectionFee;
+      });
+      calculatedTotal = totalTree + totalInterest + sumLate + sumColl;
+    }
 
     setLateInterest(sumLate);
     setCollectionFee(sumColl);
-
-    const calculatedTotal = totalTree + totalInterest + sumLate + sumColl;
     setTotalpay(calculatedTotal);
 
     if (calculatedTotal > 0) {
@@ -91,7 +106,7 @@ const PaymentWizard = ({
         console.error("QR Generation error", err);
       }
     }
-  }, [totalTree, totalInterest, selectedInstallments, contract, settings]);
+  }, [totalTree, totalInterest, selectedInstallments, contract, settings, eirBreakdown, payMode, customTotalPay]);
 
   // Auto AI Verification Helper
   const runAiVerification = async (fileToVerify) => {
@@ -235,10 +250,13 @@ const PaymentWizard = ({
           slipFile,
           contract,
           settings,
+          payMode,
+          breakdown: eirBreakdown,
+          paymentAmount: totalpay,
         });
 
         // Prepare master receipt data for A4 template
-        const sortedInsts = [...(selectedInstallments || [])].sort((a, b) => a.number_pay - b.number_pay);
+        const sortedInsts = [...(selectedInstallments || [])].sort((a, b) => Number(a.number_pay || 0) - Number(b.number_pay || 0));
         const numPayLabel = sortedInsts.map(i => i.number_pay).join(',');
         const masterReceiptData = {
           invoiceID: settlementResult.invoiceID,
@@ -248,10 +266,10 @@ const PaymentWizard = ({
           userID: contract?.userID || '',
           add_loan: contract?.add_loan || '-',
           address: contract?.add_loan || '-',
-          tree: totalTree,
-          int: totalInterest,
-          feedisapp: lateInterest,
-          feefollow: collectionFee,
+          tree: settlementResult.paidPrincipal !== undefined ? settlementResult.paidPrincipal : totalTree,
+          int: settlementResult.paidNormInt !== undefined ? settlementResult.paidNormInt : totalInterest,
+          feedisapp: settlementResult.paidLateInt !== undefined ? settlementResult.paidLateInt : lateInterest,
+          feefollow: settlementResult.paidCollFee !== undefined ? settlementResult.paidCollFee : collectionFee,
           disfeedis: 0,
           disfeefol: 0,
           accu: 0,
@@ -582,23 +600,12 @@ const PaymentWizard = ({
                     <span className="font-semibold text-primary">{totalInterest.toLocaleString()} ฿</span>
                   </div>
                   {lateInterest > 0 && (
-                    <>
-                      <div className="flex justify-between p-3.5 border-b border-slate-100 text-red-600">
-                        <span className="flex items-center gap-1 font-medium">
-                          <AlertTriangle size={14} /> ค่าปรับล่าช้า
-                        </span>
-                        <span className="font-bold">{lateInterest.toLocaleString()} ฿</span>
-                      </div>
-                      <div className="px-3.5 py-2 bg-amber-50 text-amber-900 text-xs border-b border-amber-100 flex items-center justify-between gap-1.5 font-sans">
-                        <span className="flex items-center gap-1 font-medium">
-                          <AlertTriangle size={13} className="text-amber-600 shrink-0" />
-                          ถ้ามีข้อสงสัยให้ติดต่อเจ้าหน้าที่
-                        </span>
-                        <a href="tel:0642201381" className="text-amber-700 hover:text-amber-800 font-bold underline text-[11px] shrink-0">
-                          โทร. 064-220-1381
-                        </a>
-                      </div>
-                    </>
+                    <div className="flex justify-between p-3.5 border-b border-slate-100 text-red-600">
+                      <span className="flex items-center gap-1 font-medium">
+                        <AlertTriangle size={14} /> ค่าปรับล่าช้า
+                      </span>
+                      <span className="font-bold">{lateInterest.toLocaleString()} ฿</span>
+                    </div>
                   )}
                   {collectionFee > 0 && (
                     <div className="flex justify-between p-3.5 border-b border-slate-100 text-amber-600">
@@ -606,6 +613,17 @@ const PaymentWizard = ({
                         <AlertTriangle size={14} /> ค่าทวงถาม
                       </span>
                       <span className="font-bold">{collectionFee.toLocaleString()} ฿</span>
+                    </div>
+                  )}
+                  {(lateInterest > 0 || collectionFee > 0) && (
+                    <div className="px-3.5 py-2 bg-amber-50 text-amber-900 text-xs border-b border-amber-100 flex items-center justify-between gap-1.5 font-sans">
+                      <span className="flex items-center gap-1 font-medium">
+                        <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                        ถ้ามีข้อสงสัยให้ติดต่อเจ้าหน้าที่
+                      </span>
+                      <a href="tel:0642201381" className="text-amber-700 hover:text-amber-800 font-bold underline text-[11px] shrink-0">
+                        โทร. 064-220-1381
+                      </a>
                     </div>
                   )}
                   <div className="flex justify-between p-4 bg-primary/5 border-t border-primary/10">

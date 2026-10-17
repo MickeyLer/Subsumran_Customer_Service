@@ -4,10 +4,25 @@ import React, { useContext, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DataContext } from './DataContext';
 import { fetchContactById, fetchInterestByContact } from './services/api';
-import { ChevronLeft, Receipt, CheckCircle, Clock, AlertTriangle, ArrowRight, TrendingUp } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  Receipt, 
+  CheckCircle, 
+  Clock, 
+  AlertTriangle, 
+  ArrowRight, 
+  TrendingUp,
+  Calculator,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  Info,
+  Sparkles,
+  Building2
+} from 'lucide-react';
 import { DateTime } from 'luxon';
 import { getContractProgression, formatThaiDate } from './utils/installmentProgression';
-import { getCollateralTypeInfo } from './utils/collateralType';
+import { getCollateralTypeInfo, parseCollateralDetails } from './utils/collateralType';
 
 function LoanDetails() {
   const searchParams = useSearchParams();
@@ -80,12 +95,15 @@ function LoanDetails() {
     nextPayTotal,
     paidCount,
     totalCount,
-    progressPercent
+    progressPercent,
+    payoffDetails,
   } = getContractProgression(contract, installments);
 
   const collateral = getCollateralTypeInfo(contract?.Claimthing);
+  const collateralList = parseCollateralDetails(contract?.Claimdetail, contract?.name_claim);
 
   const [isNavigatingPay, setIsNavigatingPay] = useState(false);
+  const [isPayoffExpanded, setIsPayoffExpanded] = useState(false);
 
   const handlePay = () => {
     setIsNavigatingPay(true);
@@ -156,15 +174,44 @@ function LoanDetails() {
                   </div>
                 </div>
 
-                {contract.Claimdetail && (
-                  <div className="bg-surface border border-outline-variant/50 p-sm rounded-lg">
+                {collateralList.length > 0 && (
+                  <div className="bg-surface border border-outline-variant/50 p-sm rounded-lg flex flex-col gap-1.5">
                     <p className="text-label-sm text-on-surface-variant font-medium flex items-center gap-1">
                       <span className="material-symbols-outlined text-[15px]">{collateral.icon}</span>
-                      <span>รายละเอียดหลักค้ำประกัน ({collateral.label})</span>
+                      <span>
+                        {contract.Claimthing === 'บุคคล'
+                          ? 'รายละเอียดผู้ค้ำประกัน'
+                          : `รายละเอียดหลักค้ำประกัน (${collateral.label})`}
+                      </span>
                     </p>
-                    <p className="text-[13px] text-on-surface mt-xs leading-relaxed">{contract.Claimdetail}</p>
+                    <div className="flex flex-col gap-2">
+                      {collateralList.map((item, idx) => (
+                        <div key={idx} className="text-[13px] text-on-surface leading-relaxed">
+                          {collateralList.length > 1 && (
+                            <span className="font-semibold text-primary mr-1">
+                              {item.type ? `[${item.type}]` : `รายการที่ ${idx + 1}:`}
+                            </span>
+                          )}
+                          <span>{item.details}</span>
+                          {item.coordinates && (
+                            <div className="mt-1">
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${Array.isArray(item.coordinates) ? item.coordinates.join(',') : item.coordinates}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">location_on</span>
+                                ดูตำแหน่งบนแผนที่ Google Maps
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+
 
                 <hr className="border-outline-variant/30" />
 
@@ -232,7 +279,178 @@ function LoanDetails() {
               </div>
             </div>
 
-            {/* 3. Next payment status and Pay button */}
+            {/* 3. Loan Payoff / Settlement Card (ยอดปิดบัญชี) */}
+            {payoffDetails?.isClosed || Number(contract.total_treerest || 0) <= 0 ? (
+              <div className="bg-surface-container-lowest rounded-xl shadow-md border border-emerald-300/80 overflow-hidden font-sans">
+                <div className="bg-emerald-500/10 border-b border-emerald-200/60 p-md flex items-center justify-between">
+                  <div className="flex items-center gap-sm">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-300">
+                      <ShieldCheck size={22} className="stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <h4 className="text-body-lg font-extrabold text-slate-900 font-sans">สถานะการปิดบัญชี</h4>
+                      <p className="text-[11px] text-emerald-700 font-medium font-sans">ชำระหนี้ครบถ้วนสมบูรณ์แล้ว</p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <CheckCircle size={14} /> ปิดบัญชีแล้ว
+                  </span>
+                </div>
+                <div className="p-md sm:p-lg flex flex-col items-center justify-center text-center gap-xs">
+                  <p className="text-xs text-on-surface-variant font-medium">ยอดหนี้ปิดบัญชีคงเหลือ</p>
+                  <p className="text-3xl font-black text-emerald-600 font-mono my-1">
+                    0 <span className="text-body-lg font-bold">฿</span>
+                  </p>
+                  <p className="text-xs text-slate-600 max-w-sm mt-1 leading-relaxed">
+                    สัญญานี้ได้รับการชำระยอดเงินต้นและดอกเบี้ยครบถ้วนเรียบร้อยแล้ว ไม่มีภาระหนี้ผูกพันเพิ่มเติม ขอขอบพระคุณที่ไว้วางใจใช้บริการ
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-surface-container-lowest rounded-xl shadow-md border border-emerald-500/30 overflow-hidden relative font-sans">
+                {/* Decorative gradient top edge */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-primary" />
+
+                <div className="p-md flex flex-col gap-md">
+                  {/* Header Row */}
+                  <div className="flex items-start justify-between gap-2 border-b border-outline-variant/30 pb-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                        <Calculator size={20} className="stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-body-lg font-black text-slate-900 font-sans tracking-tight">
+                            ยอดปิดบัญชี (ชำระหนี้ทั้งหมด)
+                          </h4>
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                            <Sparkles size={11} /> ปิดสัญญาวันนี้
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-on-surface-variant font-medium mt-0.5 flex items-center gap-1">
+                          <Clock size={12} className="text-slate-400" />
+                          <span>คำนวณ ณ วันที่ {payoffDetails.calcDateFormatted}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hero Payoff Amount Box */}
+                  <div className="bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/40 rounded-xl p-md border border-emerald-200/70 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800/80">
+                        ยอดสุทธิที่ต้องชำระเพื่อปิดบัญชี
+                      </span>
+                      <div className="flex items-baseline gap-1 mt-1">
+                        <span className="text-3xl sm:text-4xl font-black text-emerald-700 tracking-tight font-mono">
+                          {payoffDetails.totalPayoff.toLocaleString()}
+                        </span>
+                        <span className="text-body-lg font-bold text-emerald-800">บาท</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                        เงินต้นคงเหลือ {payoffDetails.principal.toLocaleString()} ฿ + ดอกเบี้ยตามจริง {payoffDetails.days} วัน ({payoffDetails.normalInterest.toLocaleString()} ฿)
+                        {(payoffDetails.lateInterest > 0 || payoffDetails.collectionFee > 0 || payoffDetails.accumulate > 0) && ' + ค่าปรับ/ทวงถาม/ค้างสะสม'}
+                      </p>
+                    </div>
+
+                    {/* Notice Badge: Close account at company office only */}
+                    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900 self-start sm:self-auto shrink-0 shadow-xs font-sans">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
+                        <Building2 size={18} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-extrabold text-amber-900 leading-tight">ติดต่อปิดบัญชีที่บริษัทเท่านั้น</p>
+                        <p className="text-[10px] text-amber-700 font-medium mt-0.5">ชำระและรับเอกสารสัญญา/หลักประกันคืน ณ สาขา</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Accordion Toggle for Detailed Calculation Breakdown */}
+                  <div className="border border-outline-variant/40 rounded-lg overflow-hidden bg-slate-50/60">
+                    <button
+                      type="button"
+                      onClick={() => setIsPayoffExpanded(!isPayoffExpanded)}
+                      className="w-full px-md py-2.5 flex items-center justify-between text-left hover:bg-slate-100/70 transition-colors cursor-pointer"
+                      aria-expanded={isPayoffExpanded}
+                    >
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Info size={14} className="text-primary" />
+                        <span>ดูรายละเอียดสูตรและการคำนวณยอดปิดบัญชี</span>
+                      </span>
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-primary">
+                        <span>{isPayoffExpanded ? 'ซ่อน' : 'แสดงรายละเอียด'}</span>
+                        {isPayoffExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </button>
+
+                    {isPayoffExpanded && (
+                      <div className="p-md pt-xs border-t border-outline-variant/30 flex flex-col gap-2 bg-white text-body-md">
+                        <div className="flex justify-between items-center text-xs py-1 border-b border-dashed border-slate-200">
+                          <span className="text-slate-600">1. เงินต้นคงเหลือจริง (Remaining Principal)</span>
+                          <span className="font-bold text-slate-900 font-mono">{payoffDetails.principal.toLocaleString()} ฿</span>
+                        </div>
+
+                        <div className="flex justify-between items-start text-xs py-1 border-b border-dashed border-slate-200">
+                          <div>
+                            <span className="text-slate-600">2. ดอกเบี้ยตามวันที่ใช้งานจริง (Accrued Interest)</span>
+                            <p className="text-[10px] text-slate-500">
+                              {payoffDetails.isInterestLoan
+                                ? 'สัญญารูปแบบดอกเบี้ยรายงวด'
+                                : `คิดตามจริง ${payoffDetails.days} วัน (@ อัตรา ${payoffDetails.annualRate}% ต่อปี)`}
+                            </p>
+                          </div>
+                          <span className="font-bold text-slate-900 font-mono shrink-0">
+                            {payoffDetails.normalInterest.toLocaleString()} ฿
+                          </span>
+                        </div>
+
+                        {payoffDetails.lateInterest > 0 && (
+                          <div className="flex justify-between items-center text-xs py-1 border-b border-dashed border-slate-200 text-red-600">
+                            <span>3. ดอกเบี้ยปรับชำระล่าช้า (Default Interest)</span>
+                            <span className="font-bold font-mono">+{payoffDetails.lateInterest.toLocaleString()} ฿</span>
+                          </div>
+                        )}
+
+                        {payoffDetails.collectionFee > 0 && (
+                          <div className="flex justify-between items-center text-xs py-1 border-b border-dashed border-slate-200 text-red-600">
+                            <span>4. ค่าธรรมเนียมทวงถามหนี้ (Collection Fee)</span>
+                            <span className="font-bold font-mono">+{payoffDetails.collectionFee.toLocaleString()} ฿</span>
+                          </div>
+                        )}
+
+                        {payoffDetails.accumulate > 0 && (
+                          <div className="flex justify-between items-center text-xs py-1 border-b border-dashed border-slate-200 text-amber-700">
+                            <span>5. ยอดค้างสะสมเดิม (Accumulated Debt)</span>
+                            <span className="font-bold font-mono">+{payoffDetails.accumulate.toLocaleString()} ฿</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-xs pt-1.5 font-bold text-emerald-800 bg-emerald-50/80 p-2 rounded-md">
+                          <span>รวมยอดปิดบัญชีทั้งสิ้น ณ วันนี้</span>
+                          <span className="text-sm font-black text-emerald-700 font-mono">
+                            {payoffDetails.totalPayoff.toLocaleString()} ฿
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-slate-600 leading-relaxed bg-amber-50/80 border border-amber-200/80 p-3 rounded-lg flex items-start gap-2 mt-1 font-sans">
+                          <Building2 size={16} className="text-amber-700 shrink-0 mt-0.5" />
+                          <div className="flex flex-col gap-1">
+                            <span className="font-bold text-amber-900">
+                              เงื่อนไขและช่องทางการปิดบัญชี:
+                            </span>
+                            <span className="text-[11px] text-slate-600 leading-relaxed">
+                              ยอดปิดบัญชีข้างต้นเป็นการคำนวณเบื้องต้นตามเงินต้นคงเหลือและดอกเบี้ยรายวันถึงวันที่ {payoffDetails.calcDateFormatted} หากท่านประสงค์จะปิดยอดสัญญา <strong>กรุณาติดต่อดำเนินการด้วยตนเองที่สำนักงานบริษัทเท่านั้น</strong> เพื่อตรวจสอบยอดสุทธิ ชำระเงิน และดำเนินการรับเอกสารสัญญาและหลักประกันตัวจริงคืน
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Next payment status and Pay button */}
             <div className="bg-surface-container-lowest rounded-xl shadow-md border border-outline-variant p-md flex flex-col gap-sm">
               <div className="flex items-center justify-between border-b border-outline-variant/30 pb-xs">
                 <h4 className="text-label-lg font-bold text-primary font-sans flex items-center gap-xs">

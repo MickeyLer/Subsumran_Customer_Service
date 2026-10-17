@@ -185,17 +185,19 @@ function Home() {
     setIsSubmittingRegister(true);
 
     try {
-      const GAS_WEBAPP_URL = process.env.NEXT_PUBLIC_GAS_REGISTER_URL || 'https://script.google.com/macros/s/AKfycbyV9lIdFqCSSyhcEyh_qR0fvSNPwprFmJlaVbD-BTy64KQIwbN3PMlvgsksRCyF10z29Q/exec';
-      if (GAS_WEBAPP_URL) {
-        await fetch(GAS_WEBAPP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            borrowerName: registerForm.borrowerName,
-            contractNo: registerForm.contractNo,
-            userId: userId || 'N/A'
-          })
-        });
+      const response = await fetch('/api/registerNotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          borrowerName: registerForm.borrowerName.trim(),
+          contractNo: registerForm.contractNo.trim(),
+          userId: userId || 'N/A'
+        })
+      });
+
+      const resData = await response.json();
+      if (!response.ok || !resData.success) {
+        throw new Error(resData?.error || 'เกิดข้อผิดพลาดในการส่งข้อมูล');
       }
 
       Swal.fire({
@@ -218,11 +220,11 @@ function Home() {
       setRegisterForm({ borrowerName: '', contractNo: '' });
       closeModal();
     } catch (err) {
-      console.error(err);
+      console.error('Error submitting notification registration:', err);
       Swal.fire({
         icon: 'error',
         title: 'เกิดข้อผิดพลาด',
-        text: 'ไม่สามารถส่งข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือติดต่อเจ้าหน้าที่',
+        text: err.message || 'ไม่สามารถส่งข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือติดต่อเจ้าหน้าที่',
         confirmButtonColor: '#d83a78'
       });
     } finally {

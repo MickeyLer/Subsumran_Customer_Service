@@ -87,17 +87,42 @@ function Pay() {
       ? directInstallments
       : search(dataInterest || []);
 
-    const { nextInstallment, nextFee: calculatedFee, nextFeeDetails } = getContractProgression(
+    const {
+      nextInstallment,
+      nextFee: calculatedFee,
+      nextFeeDetails,
+      overdueInstallments,
+      eirBreakdown,
+      sortedUnpaid,
+    } = getContractProgression(
       currentContact,
       installments
     );
 
+    const payMode = 'minimum';
+
+    const hasOverdue = (overdueInstallments && overdueInstallments.length > 0) || isOverdue(nextInstallment);
+    const overdueCount = overdueInstallments?.length || (isOverdue(nextInstallment) ? 1 : 0);
+
+    const annualRate = eirBreakdown?.annualRate || parseFloat(currentContact?.interest || 15);
+    const eirDays = nextFeeDetails?.days || 0;
+    const normalInterest = nextFeeDetails?.normalInterest || Number(nextInstallment?.interest || 0);
+    const lateInterest = nextFeeDetails?.lateInterest || 0;
+    const collectionFee = nextFeeDetails?.collectionFee || 0;
+
+    // Fixed to calculated minimum installment + overdue fees
+    const baseMonthly = Number(currentContact?.paypermonth || nextInstallment?.pay || 0);
+    const activePrincipal = Math.max(0, baseMonthly - normalInterest);
+    const activeInterest = normalInterest;
+    const activeTotal = eirBreakdown?.totalMinimum || (baseMonthly + lateInterest + collectionFee);
+    const activeSelectedRows = [nextInstallment].filter(Boolean);
+
     const autoPayTriggeredRef = useRef(false);
 
-    // Trigger payment modal with nextInstallment
+    // Trigger payment modal with activeSelectedRows
     const handlePayNextInstallment = () => {
-      if (!nextInstallment) return;
-      setSelectedRows([nextInstallment]);
+      if (!nextInstallment && activeSelectedRows.length === 0) return;
+      setSelectedRows(activeSelectedRows);
       setModalOpen(true);
     };
 
@@ -106,16 +131,10 @@ function Pay() {
       const autoPay = searchParams.get('autoPay');
       if ((autoPay === 'true' || autoPay === '1') && nextInstallment && !autoPayTriggeredRef.current) {
         autoPayTriggeredRef.current = true;
-        setSelectedRows([nextInstallment]);
+        setSelectedRows(activeSelectedRows);
         setModalOpen(true);
       }
-    }, [nextInstallment, searchParams]);
-
-    // Summary totals of selected rows for the wizard
-    const selectedTotal = selectedRows.reduce((acc, row) => ({
-      tree: acc.tree + Number(row.tree),
-      interest: acc.interest + Number(row.interest),
-    }), { tree: 0, interest: 0 });
+    }, [nextInstallment, searchParams, activeSelectedRows]);
 
     return (
       <div className="min-h-screen bg-surface pb-32">
@@ -134,14 +153,17 @@ function Pay() {
               setModalOpen(val);
               if (!val) setSelectedRows([]); // clear selection on close
             }} 
-            selectedInstallments={selectedRows}
-            totalTree={selectedTotal.tree}
-            totalInterest={selectedTotal.interest}
+            selectedInstallments={activeSelectedRows}
+            totalTree={activePrincipal}
+            totalInterest={activeInterest}
             rest={currentContact.total_treerest}
             Name={currentContact.Name_loan}
             idContact={searchtxt}
             accumulate={currentContact.accumulate}
             contract={currentContact}
+            payMode={payMode}
+            eirBreakdown={eirBreakdown}
+            customTotalPay={activeTotal}
           />
         )}
 
@@ -177,9 +199,9 @@ function Pay() {
                 </div>
                 
                 {/* Status Badge */}
-                {isOverdue(nextInstallment) ? (
+                {hasOverdue ? (
                   <span className="bg-red-50 text-red-700 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans animate-pulse shrink-0 whitespace-nowrap">
-                    <AlertTriangle size={14} /> ค้างชำระ
+                    <AlertTriangle size={14} /> ค้างชำระ {overdueCount > 1 ? `(${overdueCount} งวด)` : ''}
                   </span>
                 ) : (
                   <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 font-sans shrink-0 whitespace-nowrap">
@@ -198,12 +220,41 @@ function Pay() {
                       {formatThaiDate(nextInstallment.begin_date)}
                     </p>
                   </div>
-                  {isOverdue(nextInstallment) && (
-                    <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 font-medium self-start sm:self-auto">
-                      ⚠️ เกินกำหนดชำระค่างวด
+                  {hasOverdue && (
+                    <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 font-medium self-start sm:self-auto flex items-center gap-1">
+                      <AlertTriangle size={14} className="shrink-0" />
+                      <span>เกินกำหนดชำระ {overdueCount > 1 ? `(ค้างสะสม ${overdueCount} งวด)` : ''}</span>
                     </p>
                   )}
                 </div>
+
+                {/* Informational Card: ยอดปิดสัญญาทั้งหมด (แสดงให้ดูเพื่อทราบเฉยๆ) */}
+                {eirBreakdown && (
+                  <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-4 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-slate-800 font-bold text-xs uppercase tracking-wide">
+                          <span className="material-symbols-outlined text-[17px] text-emerald-600">account_balance</span>
+                          <span>ยอดสำหรับปิดสัญญาทั้งหมด (แสดงเพื่อทราบ)</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          เงินต้นคงเหลือ {Math.round(eirBreakdown.principal || currentContact?.total_treerest || 0).toLocaleString()} ฿ 
+                          + ดอกเบี้ย EIR {Math.round(eirBreakdown.normalInterest || 0).toLocaleString()} ฿ 
+                          + ค่าปรับ/ค่าทวงถามสะสม
+                        </p>
+                        <p className="text-[11px] text-amber-700 font-medium">
+                          * หากต้องการปิดบัญชีทั้งหมด หรือประสงค์ชำระเฉพาะดอกเบี้ย กรุณาติดต่อเจ้าหน้าที่เพื่อดำเนินการที่สำนักงาน
+                        </p>
+                      </div>
+                      <div className="text-right sm:text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 flex items-center sm:flex-col justify-between sm:justify-center">
+                        <span className="text-[11px] text-slate-500 font-medium">ยอดปิดบัญชี:</span>
+                        <span className="text-xl font-black text-emerald-700 font-mono">
+                          {Math.round(eirBreakdown.totalOverdue || 0).toLocaleString()} <span className="text-xs font-sans font-normal text-slate-600">฿</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Items Breakdown list */}
                 <div className="divide-y divide-outline-variant/10 text-sm">
@@ -211,10 +262,12 @@ function Pay() {
                   <div className="flex justify-between py-3.5 items-center">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-primary/40" />
-                      <span className="text-on-surface-variant">เงินต้น (Principal)</span>
+                      <div>
+                        <span className="text-on-surface-variant">เงินต้นในงวดนี้ (Principal)</span>
+                      </div>
                     </div>
                     <span className="font-bold text-primary text-base">
-                      {Number(nextInstallment.tree).toLocaleString()} ฿
+                      {Math.round(activePrincipal).toLocaleString()} ฿
                     </span>
                   </div>
 
@@ -222,59 +275,73 @@ function Pay() {
                   <div className="flex justify-between py-3.5 items-center">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-primary/40" />
-                      <span className="text-on-surface-variant">ดอกเบี้ย (Interest)</span>
+                      <div>
+                        <span className="text-on-surface-variant">ดอกเบี้ยปกติ EIR (Normal Interest)</span>
+                        <p className="text-[10px] text-slate-500">
+                          {eirDays > 0 ? `คำนวณตามจริงแบบ EIR (${eirDays} วัน)` : 'ดอกเบี้ยตามงวด'}
+                        </p>
+                      </div>
                     </div>
                     <span className="font-bold text-primary text-base">
-                      {Number(nextInstallment.interest).toLocaleString()} ฿
+                      {Math.round(activeInterest).toLocaleString()} ฿
                     </span>
                   </div>
 
                   {/* Late fee / Fine (fee2) */}
-                  <div className="py-3.5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${nextFeeDetails?.lateInterest > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
-                        <span className={`${nextFeeDetails?.lateInterest > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
+                  <div className="flex justify-between py-3.5 items-center">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${lateInterest > 0 ? 'bg-red-500' : 'bg-primary/40'}`} />
+                      <div>
+                        <span className={`${lateInterest > 0 ? 'text-red-600 font-bold' : 'text-on-surface-variant'}`}>
                           ค่าปรับล่าช้า (Late Fee)
                         </span>
+                        {overdueCount > 1 && (
+                          <p className="text-[10px] text-red-500">รวมสะสม {overdueCount} งวดที่ค้างชำระ</p>
+                        )}
                       </div>
-                      <span className={`font-bold text-base ${nextFeeDetails?.lateInterest > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                        {nextFeeDetails?.lateInterest > 0 ? `${nextFeeDetails.lateInterest.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
-                      </span>
                     </div>
-
-                    {/* Notice for Customer when there is Late Fee */}
-                    {nextFeeDetails?.lateInterest > 0 && (
-                      <div className="mt-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl p-2.5 px-3 flex items-center justify-between gap-2 text-xs text-amber-900 font-sans shadow-xs">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                          <span>ถ้ามีข้อสงสัยให้ติดต่อเจ้าหน้าที่</span>
-                        </div>
-                        <a
-                          href="tel:0642201381"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] shrink-0 no-underline transition-all active:scale-95 shadow-xs"
-                        >
-                          <Phone size={12} />
-                          โทรติดต่อ
-                        </a>
-                      </div>
-                    )}
+                    <span className={`font-bold text-base ${lateInterest > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                      {lateInterest > 0 ? `${lateInterest.toLocaleString()} ฿` : 'ไม่มีค่าปรับ 0 ฿'}
+                    </span>
                   </div>
 
                   {/* Collection Fee (fee3) */}
-                  {nextFeeDetails?.collectionFee > 0 && (
+                  {collectionFee > 0 && (
                     <div className="flex justify-between py-3.5 items-center">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                        <span className="text-amber-600 font-bold">
-                          ค่าทวงถาม (Collection Fee)
-                        </span>
+                        <div>
+                          <span className="text-amber-600 font-bold">
+                            ค่าทวงถาม (Collection Fee)
+                          </span>
+                          {overdueCount > 1 && (
+                            <p className="text-[10px] text-amber-600">รวมสะสม {overdueCount} งวดที่ค้างชำระ</p>
+                          )}
+                        </div>
                       </div>
                       <span className="font-bold text-base text-amber-600">
-                        {nextFeeDetails.collectionFee.toLocaleString()} ฿
+                        {collectionFee.toLocaleString()} ฿
                       </span>
                     </div>
                   )}
+                </div>
+
+                {/* Notice for Customer: Questions, Interest Only, Account Close */}
+                <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-2 text-xs text-amber-900 font-sans shadow-xs">
+                  <div className="flex items-center gap-2 font-medium">
+                    <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                    <div>
+                      <span>ประสงค์ชำระเฉพาะดอกเบี้ย ปิดยอดสัญญา หรือมีข้อสงสัย?</span>
+                      <p className="text-[11px] text-amber-700/80">กรุณาติดต่อเจ้าหน้าที่เพื่อดำเนินการที่สำนักงาน</p>
+                    </div>
+                  </div>
+                  <a
+                    href="tel:0642201381"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shrink-0 no-underline transition-all active:scale-95 shadow-xs"
+                  >
+                    <Phone size={13} />
+                    โทรติดต่อ
+                  </a>
                 </div>
 
                 {/* Total amount container */}
@@ -284,12 +351,12 @@ function Pay() {
                       ยอดรวมที่ต้องชำระงวดนี้
                     </p>
                     <p className="text-xs text-white/70 font-sans mt-0.5">
-                      (เงินต้น + ดอกเบี้ย + ค่าปรับ + ค่าทวงถาม)
+                      (ค่างวดตามที่คำนวณได้ รวมค่าปรับและค่าทวงถามสะสม)
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-black text-secondary-fixed leading-none">
-                      {(Number(nextInstallment.tree) + Number(nextInstallment.interest) + calculatedFee).toLocaleString()}
+                      {Math.round(activeTotal).toLocaleString()}
                       <span className="text-sm font-normal text-white ml-1">฿</span>
                     </p>
                   </div>
@@ -301,7 +368,9 @@ function Pay() {
                   className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-700/25 transition-all active:scale-[0.98] text-base border border-emerald-500/30 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/40 cursor-pointer mt-4"
                 >
                   <ShoppingCart size={20} className="shrink-0" />
-                  <span>ดำเนินการชำระค่างวดที่ {nextInstallment.number_pay}</span>
+                  <span>
+                    ดำเนินการชำระค่างวดที่ {nextInstallment.number_pay} ({Math.round(activeTotal).toLocaleString()} ฿)
+                  </span>
                   <ChevronRight size={18} className="shrink-0 opacity-80" />
                 </button>
               </div>

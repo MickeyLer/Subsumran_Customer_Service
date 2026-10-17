@@ -13,25 +13,21 @@ import { Alert } from "react-bootstrap";
 
 function SelectIDcontact() {
     
-    const {userId} = useContext(AuthContext);
-    const [currentUserId,setCurrentuser] = useState(userId);
-    //const [currentUserId,setCurrentuser] = useState('U2cd360ba05fa93c6907ca768afb9a458');
-    //const [currentUserId,setCurrentuser] = useState('U120264c5ef686a8313675996cbbf3793');
+    const { userId } = useContext(AuthContext);
+    const currentUserId = userId;
     
-    const {dataContact,setDataContact} = useContext(DataContext);
-    const [idcontact , setIDcontact] = useState(null);
+    const { dataContact, setDataContact } = useContext(DataContext);
+    const [idcontact, setIDcontact] = useState(null);
     const [loadingContractId, setLoadingContractId] = useState(null);
 
     const router = useRouter();
     
-    //console.log(userId);
-    
-    useEffect(()=>{
-        if (dataContact !== null){  
-            const IDContactTable = dataContact.filter(row=>row.userID === currentUserId).filter(row=>row.total_treerest > 0);
+    useEffect(() => {
+        if (dataContact !== null && currentUserId) {  
+            const IDContactTable = dataContact.filter(row => row.userID === currentUserId).filter(row => row.total_treerest > 0);
             setIDcontact(IDContactTable); 
         }
-    },[dataContact]);
+    }, [dataContact, currentUserId]);
  
     useEffect(()=>{
         if (idcontact !== null){

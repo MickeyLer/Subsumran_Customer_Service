@@ -119,3 +119,121 @@ export const getCollateralTypeInfo = (claimThing) => {
     colorName: 'rose',
   };
 };
+
+/**
+ * Parses and normalizes Claimdetail string into a clean list of collateral items.
+ * Safely handles:
+ * 1. Legacy plain-text strings (older contracts)
+ * 2. Modern serialized JSON arrays and objects (newer contracts)
+ * 3. Fallback extraction from formData or contract.name_claim
+ * 
+ * @param {string|any} claimDetail - Raw Claimdetail from database
+ * @param {string} [nameClaim] - Fallback guarantor name (from contract.name_claim)
+ * @returns {Array<{type: string, details: string, images: string[], coordinates: any}>}
+ */
+export const parseCollateralDetails = (claimDetail, nameClaim = '') => {
+  if (!claimDetail) return [];
+
+  let parsed = null;
+
+  if (typeof claimDetail === 'string') {
+    const trimmed = claimDetail.trim();
+    if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (err) {
+        parsed = null;
+      }
+    }
+  } else if (typeof claimDetail === 'object') {
+    parsed = claimDetail;
+  }
+
+  // Handle double-encoded JSON strings if any
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (e) {
+      // keep as string
+    }
+  }
+
+  // Fallback: If not JSON, it's a plain text description (older contracts)
+  if (!parsed) {
+    const text = String(claimDetail).trim();
+    return text ? [{ type: '', details: text, images: [], coordinates: null }] : [];
+  }
+
+  const rawList = Array.isArray(parsed) ? parsed : [parsed];
+
+  return rawList
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { type: '', details: item.trim(), images: [], coordinates: null };
+      }
+      if (!item || typeof item !== 'object') {
+        return { type: '', details: String(item || '').trim(), images: [], coordinates: null };
+      }
+
+      const type = item.type || '';
+      let details = (item.details || '').trim();
+      const formData = item.formData || {};
+
+      // 1. Person guarantor fallbacks
+      if (type.includes('บุคคล') || (!details || details === 'ผู้ค้ำประกัน')) {
+        if (!details || details === 'ผู้ค้ำประกัน') {
+          if (formData.details && formData.details.trim() && formData.details.trim() !== 'ผู้ค้ำประกัน') {
+            details = formData.details.trim();
+          } else if (formData.name && formData.name.trim()) {
+            details = `ผู้ค้ำประกัน: ${formData.name.trim()}`;
+          } else if (nameClaim && nameClaim.trim()) {
+            details = `ผู้ค้ำประกัน: ${nameClaim.trim()}`;
+          }
+        }
+      }
+
+      // 2. Land details fallbacks
+      if (!details && (type.includes('ที่ดิน') || formData.deedNumber || formData.land)) {
+        const land = formData.land || formData;
+        const parts = [];
+        if (land.deedNumber) parts.push(`โฉนดเลขที่ ${land.deedNumber}`);
+        if (land.landNumber) parts.push(`เลขที่ดิน ${land.landNumber}`);
+        if (land.survey) parts.push(`หน้าสำรวจ ${land.survey}`);
+        if (land.subDistrict) parts.push(`ตำบล ${land.subDistrict}`);
+        if (land.district) parts.push(`อำเภอ ${land.district}`);
+        if (land.province) parts.push(`จังหวัด ${land.province}`);
+        if (land.area || land.book || land.zone) {
+          parts.push(`เนื้อที่ ${land.area || 0} ไร่ ${land.book || 0} งาน ${land.zone || 0} ตารางวา`);
+        }
+        if (parts.length > 0) details = parts.join(' ');
+      }
+
+      // 3. Vehicle details fallbacks
+      if (!details && (type.includes('รถ') || formData.brand || formData.car || formData.motorcycle)) {
+        const veh = formData.car || formData.motorcycle || formData;
+        const parts = [];
+        if (veh.brand) parts.push(`ยี่ห้อ ${veh.brand}`);
+        if (veh.model) parts.push(`รุ่น ${typeof veh.model === 'object' ? veh.model.name : veh.model}`);
+        if (veh.licensePlate) parts.push(`ทะเบียน ${veh.licensePlate}`);
+        if (veh.province) parts.push(`จังหวัด ${veh.province}`);
+        if (parts.length > 0) details = parts.join(' ');
+      }
+
+      // 4. Coordinates extraction
+      let coordinates = item.coordinates || null;
+      if (!coordinates && formData.coordinates) {
+        coordinates = formData.coordinates;
+      } else if (!coordinates && formData.latitude && formData.longitude) {
+        coordinates = [formData.latitude, formData.longitude];
+      }
+
+      return {
+        type,
+        details: details || item.details || '-',
+        images: Array.isArray(item.images) ? item.images : [],
+        coordinates,
+      };
+    })
+    .filter((item) => item.details && item.details !== '-');
+};
+

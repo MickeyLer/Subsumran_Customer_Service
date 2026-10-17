@@ -525,4 +525,38 @@ export const fetchPendingPayments = async (status = 'pending') => {
     return handleResponse(data, error, 'fetchPendingPayments') || [];
 };
 
+// ==========================================
+// NOTIFICATION REGISTRATION APIs
+// ==========================================
+
+export const createNotificationRegistration = async (registrationData) => {
+    const { data, error } = await supabase
+        .from('notification_registrations')
+        .insert([registrationData])
+        .select()
+        .single();
+    return handleResponse(data, error, 'createNotificationRegistration');
+};
+
+export const fetchNotificationRegistrationById = async (id) => {
+    if (!id) return null;
+    const { data, error } = await supabase
+        .from('notification_registrations')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+    return handleResponse(data, error, 'fetchNotificationRegistrationById');
+};
+
+export const updateNotificationRegistration = async (id, updateData) => {
+    if (!id) return null;
+    const { data, error } = await supabase
+        .from('notification_registrations')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+    return handleResponse(data, error, 'updateNotificationRegistration');
+};
+
 

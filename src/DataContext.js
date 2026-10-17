@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import { 
     fetchContacts, 
     fetchAllInterest, 
@@ -12,6 +12,7 @@ import {
     fetchContactById,
     fetchInterestByContact
 } from './services/api';
+import { AuthContext } from './linelogin';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -24,6 +25,9 @@ import 'react-toastify/dist/ReactToastify.css';
 export const DataContext = React.createContext(null);
 
 export const DataProvider = ({ children }) => {
+    const auth = useContext(AuthContext);
+    const activeUserId = auth?.userId;
+
     const [dataContact, setDataContact] = useState(null);
     const [dataCustomer, setDataCustomer] = useState(null);
     const [dataInterest, setInterestData] = useState(null);
@@ -181,11 +185,13 @@ export const DataProvider = ({ children }) => {
         }
     }, []);
 
-    // Initial load: Default user ID (or can be triggered per user)
+    // Initial load: load active user data (LIFF user or fallback mock user)
     useEffect(() => {
-        const defaultUserId = "U2cd360ba05fa93c6907ca768afb9a458";
-        refreshUserData(defaultUserId);
-    }, [refreshUserData]);
+        const targetUserId = activeUserId || process.env.NEXT_PUBLIC_MOCK_LINE_USER_ID || "Ub120a67529206419f81a29dc33b1afd1";
+        if (targetUserId) {
+            refreshUserData(targetUserId);
+        }
+    }, [activeUserId, refreshUserData]);
 
     // Domain queries
     const getContactsByUserId = useCallback((userId) => {
