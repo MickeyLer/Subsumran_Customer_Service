@@ -279,7 +279,78 @@ function LoanDetails() {
               </div>
             </div>
 
-            {/* 3. Loan Payoff / Settlement Card (ยอดปิดบัญชี) */}
+            {/* 3. Next payment status and Pay button */}
+            <div className="bg-surface-container-lowest rounded-xl shadow-md border border-outline-variant p-md flex flex-col gap-sm">
+              <div className="flex items-center justify-between border-b border-outline-variant/30 pb-xs">
+                <h4 className="text-label-lg font-bold text-primary font-sans flex items-center gap-xs">
+                  <span className="material-symbols-outlined text-[18px]">calendar_month</span> ข้อมูลค่างวดงวดถัดไป
+                </h4>
+                {nextPayment ? (
+                  <span className="bg-error-container text-on-error-container px-sm py-0.5 rounded-full text-[10px] font-bold font-sans">รอดำเนินการ</span>
+                ) : (
+                  <span className="bg-green-100 text-green-700 px-sm py-0.5 rounded-full text-[10px] font-bold font-sans">จ่ายครบถ้วนแล้ว</span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between font-sans py-xs">
+                {nextPayment ? (
+                  <>
+                    <div>
+                      <p className="text-label-sm text-on-surface-variant">กำหนดชำระงวดถัดไป:</p>
+                      <p className="text-body-lg font-bold text-primary leading-tight mt-xs">
+                        {formatThaiDate(nextPayment.begin_date)}
+                      </p>
+                      <p className="text-xs text-outline font-semibold font-mono mt-xs">งวดที่ {nextPayment.number_pay}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-label-sm text-on-surface-variant">ยอดที่ต้องชำระ:</p>
+                      <p className="text-headline-sm font-black text-primary leading-none mt-xs">
+                        {nextPayTotal.toLocaleString()} <span className="text-body-md font-normal">฿</span>
+                      </p>
+                      {nextFee > 0 && (
+                        <p className="text-[11px] font-bold text-red-600 mt-1 font-sans">
+                          (รวมค่าปรับ {nextFee.toLocaleString()} ฿)
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-sm py-xs w-full justify-center text-green-600 font-bold">
+                    <CheckCircle size={24} /> สัญญานี้ได้รับการชำระยอดเงินต้นครบถ้วนดีเยี่ยมแล้ว
+                  </div>
+                )}
+              </div>
+
+              {nextPayment && (
+                <div className="mt-sm">
+                  <button 
+                    onClick={handlePay}
+                    disabled={isNavigatingPay}
+                    className={`w-full text-body-md font-bold py-3.5 rounded-lg transition-all shadow-md flex items-center justify-center gap-xs font-sans ${
+                      isNavigatingPay 
+                        ? 'bg-primary/70 text-white cursor-not-allowed' 
+                        : 'bg-primary text-white hover:bg-primary-container active:scale-95'
+                    }`}
+                  >
+                    {isNavigatingPay ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>กำลังไปหน้าชำระเงิน...</span>
+                      </>
+                    ) : (
+                      <>
+                        ชำระเงินตอนนี้ <span className="material-symbols-outlined text-[18px]">payments</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 4. Loan Payoff / Settlement Card (ยอดปิดบัญชี) */}
             {payoffDetails?.isClosed || Number(contract.total_treerest || 0) <= 0 ? (
               <div className="bg-surface-container-lowest rounded-xl shadow-md border border-emerald-300/80 overflow-hidden font-sans">
                 <div className="bg-emerald-500/10 border-b border-emerald-200/60 p-md flex items-center justify-between">
@@ -450,78 +521,7 @@ function LoanDetails() {
               </div>
             )}
 
-            {/* 4. Next payment status and Pay button */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-md border border-outline-variant p-md flex flex-col gap-sm">
-              <div className="flex items-center justify-between border-b border-outline-variant/30 pb-xs">
-                <h4 className="text-label-lg font-bold text-primary font-sans flex items-center gap-xs">
-                  <span className="material-symbols-outlined text-[18px]">calendar_month</span> ข้อมูลค่างวดงวดถัดไป
-                </h4>
-                {nextPayment ? (
-                  <span className="bg-error-container text-on-error-container px-sm py-0.5 rounded-full text-[10px] font-bold font-sans">รอดำเนินการ</span>
-                ) : (
-                  <span className="bg-green-100 text-green-700 px-sm py-0.5 rounded-full text-[10px] font-bold font-sans">จ่ายครบถ้วนแล้ว</span>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between font-sans py-xs">
-                {nextPayment ? (
-                  <>
-                    <div>
-                      <p className="text-label-sm text-on-surface-variant">กำหนดชำระงวดถัดไป:</p>
-                      <p className="text-body-lg font-bold text-primary leading-tight mt-xs">
-                        {formatThaiDate(nextPayment.begin_date)}
-                      </p>
-                      <p className="text-xs text-outline font-semibold font-mono mt-xs">งวดที่ {nextPayment.number_pay}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-label-sm text-on-surface-variant">ยอดที่ต้องชำระ:</p>
-                      <p className="text-headline-sm font-black text-primary leading-none mt-xs">
-                        {nextPayTotal.toLocaleString()} <span className="text-body-md font-normal">฿</span>
-                      </p>
-                      {nextFee > 0 && (
-                        <p className="text-[11px] font-bold text-red-600 mt-1 font-sans">
-                          (รวมค่าปรับ {nextFee.toLocaleString()} ฿)
-                        </p>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-sm py-xs w-full justify-center text-green-600 font-bold">
-                    <CheckCircle size={24} /> สัญญานี้ได้รับการชำระยอดเงินต้นครบถ้วนดีเยี่ยมแล้ว
-                  </div>
-                )}
-              </div>
-
-              {nextPayment && (
-                <div className="mt-sm">
-                  <button 
-                    onClick={handlePay}
-                    disabled={isNavigatingPay}
-                    className={`w-full text-body-md font-bold py-3.5 rounded-lg transition-all shadow-md flex items-center justify-center gap-xs font-sans ${
-                      isNavigatingPay 
-                        ? 'bg-primary/70 text-white cursor-not-allowed' 
-                        : 'bg-primary text-white hover:bg-primary-container active:scale-95'
-                    }`}
-                  >
-                    {isNavigatingPay ? (
-                      <>
-                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>กำลังไปหน้าชำระเงิน...</span>
-                      </>
-                    ) : (
-                      <>
-                        ชำระเงินตอนนี้ <span className="material-symbols-outlined text-[18px]">payments</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 4. Payment History Card */}
+            {/* 5. Payment History Card */}
             <div className="bg-surface-container-lowest rounded-xl shadow-md border border-outline-variant overflow-hidden flex flex-col">
               <div className="bg-slate-50 border-b border-outline-variant/30 p-md flex items-center gap-xs">
                 <Receipt size={18} className="text-primary" />

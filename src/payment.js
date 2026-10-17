@@ -228,34 +228,6 @@ function Pay() {
                   )}
                 </div>
 
-                {/* Informational Card: ยอดปิดสัญญาทั้งหมด (แสดงให้ดูเพื่อทราบเฉยๆ) */}
-                {eirBreakdown && (
-                  <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-4 shadow-2xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 text-slate-800 font-bold text-xs uppercase tracking-wide">
-                          <span className="material-symbols-outlined text-[17px] text-emerald-600">account_balance</span>
-                          <span>ยอดสำหรับปิดสัญญาทั้งหมด (แสดงเพื่อทราบ)</span>
-                        </div>
-                        <p className="text-xs text-slate-500 leading-relaxed">
-                          เงินต้นคงเหลือ {Math.round(eirBreakdown.principal || currentContact?.total_treerest || 0).toLocaleString()} ฿ 
-                          + ดอกเบี้ย EIR {Math.round(eirBreakdown.normalInterest || 0).toLocaleString()} ฿ 
-                          + ค่าปรับ/ค่าทวงถามสะสม
-                        </p>
-                        <p className="text-[11px] text-amber-700 font-medium">
-                          * หากต้องการปิดบัญชีทั้งหมด หรือประสงค์ชำระเฉพาะดอกเบี้ย กรุณาติดต่อเจ้าหน้าที่เพื่อดำเนินการที่สำนักงาน
-                        </p>
-                      </div>
-                      <div className="text-right sm:text-right shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 flex items-center sm:flex-col justify-between sm:justify-center">
-                        <span className="text-[11px] text-slate-500 font-medium">ยอดปิดบัญชี:</span>
-                        <span className="text-xl font-black text-emerald-700 font-mono">
-                          {Math.round(eirBreakdown.totalOverdue || 0).toLocaleString()} <span className="text-xs font-sans font-normal text-slate-600">฿</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Items Breakdown list */}
                 <div className="divide-y divide-outline-variant/10 text-sm">
                   {/* Principal */}
@@ -326,23 +298,22 @@ function Pay() {
                   )}
                 </div>
 
-                {/* Notice for Customer: Questions, Interest Only, Account Close */}
-                <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-2 text-xs text-amber-900 font-sans shadow-xs">
-                  <div className="flex items-center gap-2 font-medium">
-                    <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                    <div>
-                      <span>ประสงค์ชำระเฉพาะดอกเบี้ย ปิดยอดสัญญา หรือมีข้อสงสัย?</span>
-                      <p className="text-[11px] text-amber-700/80">กรุณาติดต่อเจ้าหน้าที่เพื่อดำเนินการที่สำนักงาน</p>
+                {/* Notice for Customer: Questions regarding Late Fee / Collection Fee */}
+                {(lateInterest > 0 || collectionFee > 0) && (
+                  <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-2 text-xs text-amber-900 font-sans shadow-xs">
+                    <div className="flex items-center gap-2 font-medium">
+                      <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                      <span>หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่</span>
                     </div>
+                    <a
+                      href="tel:0642201381"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shrink-0 no-underline transition-all active:scale-95 shadow-xs"
+                    >
+                      <Phone size={13} />
+                      โทรติดต่อ
+                    </a>
                   </div>
-                  <a
-                    href="tel:0642201381"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shrink-0 no-underline transition-all active:scale-95 shadow-xs"
-                  >
-                    <Phone size={13} />
-                    โทรติดต่อ
-                  </a>
-                </div>
+                )}
 
                 {/* Total amount container */}
                 <div className="bg-primary text-white p-5 rounded-xl flex items-center justify-between border border-secondary-fixed/40 shadow-sm">
