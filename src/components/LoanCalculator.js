@@ -46,7 +46,6 @@ export default function LoanCalculator({
   initialAmount = 50000,
   initialMonths = 36,
   userName = '',
-  userPhone = '',
   lineUserId = '',
   lineDisplayName = '',
   linePictureUrl = '',
@@ -60,19 +59,18 @@ export default function LoanCalculator({
   const [months, setMonths] = useState(initialMonths);
   const interestRate = 36; // 36% per year (Pico Finance standard)
 
-  // Form State
+  // Form State (Phone always starts empty for user to input manually)
   const [customerName, setCustomerName] = useState(userName || '');
-  const [phone, setPhone] = useState(userPhone || '');
+  const [phone, setPhone] = useState('');
   const [collateral, setCollateral] = useState('ที่ดิน');
   const [collateralDetail, setCollateralDetail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showApplyForm, setShowApplyForm] = useState(true);
 
-  // Sync initial values if user logs in or updates
+  // Sync initial user name if logged in
   useEffect(() => {
     if (userName && !customerName) setCustomerName(userName);
-    if (userPhone && !phone) setPhone(userPhone);
-  }, [userName, userPhone]);
+  }, [userName]);
 
   // Real-time calculation
   const calculation = useMemo(() => {
@@ -489,7 +487,7 @@ export default function LoanCalculator({
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="เช่น นายสมชาย ใจดี"
+                    placeholder="กรอกชื่อ-นามสกุล"
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   />
                 </div>
@@ -509,7 +507,7 @@ export default function LoanCalculator({
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="เช่น 081-234-5678"
+                    placeholder="กรอกเบอร์โทรศัพท์ 10 หลัก"
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all font-mono"
                   />
                 </div>

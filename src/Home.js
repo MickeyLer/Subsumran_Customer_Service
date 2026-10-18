@@ -83,16 +83,6 @@ function Home() {
     return '';
   }, [impersonatedCustomer, displayName, dataCustomer, dataContact, userId]);
 
-  // Customer Phone Resolver
-  const customerPhone = useMemo(() => {
-    if (impersonatedCustomer?.phone) return impersonatedCustomer.phone;
-    if (dataCustomer && userId) {
-      const matched = dataCustomer.find(c => c.userID === userId || c.ID === userId);
-      if (matched?.phone) return matched.phone;
-    }
-    return '';
-  }, [impersonatedCustomer, dataCustomer, userId]);
-
   // Admin Switcher Autocomplete State
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
   const [isAdminSearchOpen, setIsAdminSearchOpen] = useState(false);
@@ -1396,7 +1386,6 @@ function Home() {
                   initialAmount={50000}
                   initialMonths={36}
                   userName={customerDisplayName || displayName || ''}
-                  userPhone={customerPhone || ''}
                   lineUserId={userId || ''}
                   lineDisplayName={displayName || ''}
                   linePictureUrl={pictureUrl || ''}
