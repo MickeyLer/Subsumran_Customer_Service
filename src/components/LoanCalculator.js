@@ -149,6 +149,10 @@ export default function LoanCalculator({
     setIsSubmitting(true);
 
     try {
+      const currentCalc = calculatePMT(loanAmount, interestRate, months);
+      const monthlyToSubmit = currentCalc.monthly || calculation.monthly;
+      const totalToSubmit = currentCalc.totalPayment || calculation.totalPayment;
+
       const response = await fetch('/api/loanInquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,8 +164,8 @@ export default function LoanCalculator({
           loanAmount: loanAmount,
           months: months,
           interestRate: interestRate,
-          monthlyInstallment: calculation.monthly,
-          totalPayment: calculation.totalPayment,
+          monthlyInstallment: monthlyToSubmit,
+          totalPayment: totalToSubmit,
           lineUserId: lineUserId || '',
           lineDisplayName: lineDisplayName || '',
           linePictureUrl: linePictureUrl || '',

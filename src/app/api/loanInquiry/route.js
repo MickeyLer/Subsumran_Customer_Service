@@ -73,10 +73,23 @@ export async function POST(request) {
       );
     }
 
-    const numAmount = Number(loanAmount);
-    const numMonths = Number(months);
-    const numMonthly = Number(monthlyInstallment);
-    const numTotal = Number(totalPayment) || (numMonthly * numMonths);
+    const numAmount = Number(loanAmount) || 0;
+    const numMonths = Math.max(1, Number(months) || 1);
+    const numRate = Number(interestRate) || 36;
+
+    // Calculate PMT on server if not provided or <= 0
+    let numMonthly = Number(monthlyInstallment) || 0;
+    if (numMonthly <= 0 && numAmount > 0) {
+      const r = (numRate / 100) / 12;
+      if (r === 0) {
+        numMonthly = Math.round(numAmount / numMonths);
+      } else {
+        const factor = Math.pow(1 + r, numMonths);
+        numMonthly = Math.round((numAmount * r * factor) / (factor - 1));
+      }
+    }
+
+    const numTotal = Number(totalPayment) > 0 ? Number(totalPayment) : (numMonthly * numMonths);
 
     // 1. Insert into Supabase table `loan_inquiries`
     let insertedInquiry = null;
