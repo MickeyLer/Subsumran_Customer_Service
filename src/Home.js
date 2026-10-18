@@ -12,6 +12,7 @@ import supabase from './supabaseClient';
 import { calculateTierInfo } from './utils/tierConfig';
 import { getContractProgression, getOverallProgression, formatThaiDate } from './utils/installmentProgression';
 import { getCollateralTypeInfo } from './utils/collateralType';
+import LoanCalculator from './components/LoanCalculator';
 
 function Home() {
   const router = useRouter();
@@ -81,6 +82,16 @@ function Home() {
     }
     return '';
   }, [impersonatedCustomer, displayName, dataCustomer, dataContact, userId]);
+
+  // Customer Phone Resolver
+  const customerPhone = useMemo(() => {
+    if (impersonatedCustomer?.phone) return impersonatedCustomer.phone;
+    if (dataCustomer && userId) {
+      const matched = dataCustomer.find(c => c.userID === userId || c.ID === userId);
+      if (matched?.phone) return matched.phone;
+    }
+    return '';
+  }, [impersonatedCustomer, dataCustomer, userId]);
 
   // Admin Switcher Autocomplete State
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
@@ -1076,7 +1087,7 @@ function Home() {
                 {activeModal === 'contact' && <span className="material-symbols-outlined font-bold text-secondary">contact_support</span>}
                 {activeModal === 'bank' && <span className="material-symbols-outlined font-bold text-secondary">account_balance</span>}
                 {activeModal === 'savings' && <span className="material-symbols-outlined font-bold text-secondary">gold</span>}
-                {activeModal === 'services' && <span className="material-symbols-outlined font-bold text-secondary">widgets</span>}
+                {activeModal === 'services' && <span className="material-symbols-outlined font-bold text-secondary">calculate</span>}
                 {activeModal === 'contractSelect' && <span className="material-symbols-outlined font-bold text-secondary">receipt_long</span>}
                 {activeModal === 'registerNotify' && <span className="material-symbols-outlined font-bold text-secondary">notifications_active</span>}
                 <h2 className="text-headline-sm font-bold">
@@ -1379,31 +1390,18 @@ function Home() {
                 </div>
               )}
 
-              {/* MODAL 5: CREDIT SERVICES / Pico Loans */}
+              {/* MODAL 5: CREDIT SERVICES / Pico Loans & Interactive Calculator */}
               {activeModal === 'services' && (
-                <div className="flex flex-col gap-md">
-                  <div className="flex flex-col gap-sm">
-                    <div className="border border-outline-variant rounded-lg p-md bg-surface flex flex-col gap-xs relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-primary text-secondary-fixed px-sm py-[2px] rounded-bl-lg text-[9px] font-bold font-sans">Pico Finance</div>
-                      <h4 className="text-body-md font-bold text-primary">สินเชื่ออเนกประสงค์ ทรัพย์สำราญ</h4>
-                      <p className="text-label-sm text-on-surface-variant">สินเชื่อสำหรับบุคคลทั่วไปเพื่อเสริมสภาพคล่องทางการเงิน ดอกเบี้ยลดต้นลดดอกสูงสุดไม่เกิน 3% ต่อเดือน อนุมัติง่ายในพื้นที่</p>
-                      <div className="mt-sm flex justify-between items-center">
-                        <span className="text-[11px] text-outline font-bold">วงเงินกู้สูงสุด 50,000 บาท</span>
-                        <a href="tel:0642201381" className="bg-primary text-secondary-fixed text-label-sm font-bold px-sm py-1.5 rounded-lg active:scale-95 shadow transition-all">โทรปรึกษา</a>
-                      </div>
-                    </div>
-
-                    <div className="border border-outline-variant rounded-lg p-md bg-surface flex flex-col gap-xs relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-primary text-secondary-fixed px-sm py-[2px] rounded-bl-lg text-[9px] font-bold font-sans">Nano Finance</div>
-                      <h4 className="text-body-md font-bold text-primary">สินเชื่อเพื่อการค้า/แม่ค้าคนเก่ง</h4>
-                      <p className="text-label-sm text-on-surface-variant">เหมาะสำหรับพ่อค้าแม่ขาย ร้านค้าปลีก ตลาดสด เพื่อนำไปใช้เป็นทุนหมุนเวียนในการซื้อวัตถุดิบและขยายร้านค้า</p>
-                      <div className="mt-sm flex justify-between items-center">
-                        <span className="text-[11px] text-outline font-bold">วงเงินกู้สูงสุด 100,000 บาท</span>
-                        <a href="tel:0642201381" className="bg-primary text-secondary-fixed text-label-sm font-bold px-sm py-1.5 rounded-lg active:scale-95 shadow transition-all">โทรปรึกษา</a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <LoanCalculator
+                  initialAmount={50000}
+                  initialMonths={36}
+                  userName={customerDisplayName || displayName || ''}
+                  userPhone={customerPhone || ''}
+                  lineUserId={userId || ''}
+                  lineDisplayName={displayName || ''}
+                  linePictureUrl={pictureUrl || ''}
+                  onClose={() => closeModal(false)}
+                />
               )}
 
               {/* MODAL 6: CONTRACT SELECTOR FOR MULTI-CONTRACT CLIENTS */}
@@ -1472,7 +1470,7 @@ function Home() {
                 }}
                 className="bg-primary text-white text-label-sm font-bold px-md py-2 rounded-lg hover:opacity-90 active:scale-95 transition-all font-sans"
               >
-                ตกลง
+                {activeModal === 'services' ? 'ปิดหน้าต่าง' : 'ตกลง'}
               </button>
             </div>
           </div>
